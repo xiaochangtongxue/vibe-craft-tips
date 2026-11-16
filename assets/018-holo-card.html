@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>018 · 镭射卡片：随指针倾斜、光随角度走、能翻面的 3D 卡</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 018 镭射卡片 ---------- */
+/* 光晕色相注册成数值，换材质时能 1s 过渡 */
+@property --t018-hue { syntax: '<number>'; inherits: false; initial-value: 228; }
+
+.t018-stage { display: grid; grid-template-columns: minmax(0, 1fr) 316px; gap: 18px; padding: 16px; }
+@media (max-width: 820px) { .t018-stage { grid-template-columns: 1fr; } }
+
+/* 场景：卡后的页面。浅 / 深两种页面色，流体淡出到这个颜色 */
+.t018-scene {
+  --t018-page: rgb(14 15 19);
+  position: relative; height: 400px; border-radius: 14px; overflow: hidden;
+  display: grid; place-items: center; background: var(--t018-page);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.t018-scene[data-page="light"] { --t018-page: rgb(238 240 244); }
+.t018-fluid { position: absolute; inset: 0; width: 100%; height: 100%; }
+.t018-glow {
+  position: absolute; left: 50%; top: 50%; width: 500px; height: 500px; margin: -250px 0 0 -250px; pointer-events: none;
+  background: radial-gradient(closest-side, hsl(var(--t018-hue) 85% 64% / .3), transparent);
+  transition: --t018-hue 1s ease;
+}
+
+/* 卡：440 × 616 的设计按卡宽缩到 250 × 350，圆角 32 → 18、徽章 44 → 25；倾斜角、景深、厚度不缩放 */
+.t018-persp {
+  --t018-w: 250px; --t018-h: 350px; --t018-r: 18px;
+  position: relative; width: var(--t018-w); height: var(--t018-h);
+  perspective: 1600px; touch-action: none;
+}
+.t018-shadow {
+  position: absolute; left: 8%; width: 84%; top: calc(100% - 40px); height: 70px; border-radius: 50%;
+  background: rgb(0 0 0 / .6); filter: blur(24px); pointer-events: none;
+}
+.t018-card { position: absolute; inset: 0; transform-style: preserve-3d; will-change: transform; border-radius: var(--t018-r); }
+.t018-card[role="button"] { cursor: pointer; }
+.t018-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+.t018-edge { position: absolute; inset: 0; transform-style: preserve-3d; }
+.t018-slice { position: absolute; inset: 0; border-radius: var(--t018-r); background: var(--t018-edge-c); }
+
+.t018-face {
+  --t018-lx: 34; --t018-ly: 22; --t018-on: 0;
+  --t018-L: calc(var(--t018-lx) * 1%) calc(var(--t018-ly) * 1%);
+  --t018-rim-base: rgb(255 255 255 / .05); --t018-rim-light: rgb(255 255 255 / .5);
+  --t018-ink2: color-mix(in srgb, var(--t018-ink) 62%, transparent);
+  position: absolute; inset: 0; border-radius: var(--t018-r); overflow: hidden; isolation: isolate;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  color: var(--t018-ink);
+}
+.t018-front { transform: translateZ(var(--t018-half)); }
+.t018-back { transform: rotateY(180deg) translateZ(var(--t018-half)); }
+/* 换材质时盖在上面淡出的旧面，往前挪 0.5px 避免和新面共面闪烁 */
+.t018-front.t018-ghost { transform: translateZ(calc(var(--t018-half) + .5px)); }
+.t018-back.t018-ghost { transform: rotateY(180deg) translateZ(calc(var(--t018-half) + .5px)); }
+@supports (corner-shape: superellipse(1.25)) {
+  .t018-face, .t018-slice, .t018-rim, .t018-foil, .t018-card { corner-shape: superellipse(1.25); }
+}
+
+.t018-art, .t018-foil, .t018-print, .t018-rim { position: absolute; inset: 0; border-radius: inherit; }
+.t018-foil { will-change: transform; pointer-events: none; }
+.t018-foil::before, .t018-foil::after { content: none; position: absolute; inset: 0; }
+.t018-glare {
+  position: absolute; left: -50%; top: -50%; width: 200%; height: 200%; pointer-events: none; will-change: transform;
+  background: radial-gradient(farthest-corner at 50% 50%, rgb(255 255 255 / .6), rgb(255 255 255 / .14) 28%, rgb(0 0 0 / .3) 95%);
+  mix-blend-mode: overlay; opacity: calc(.35 + var(--t018-on) * .65);
+}
+/* 亮边：1.5px 的环，一圈淡底色 + 光点处的一段亮色 */
+.t018-rim {
+  padding: 1.5px; pointer-events: none;
+  background: radial-gradient(circle at var(--t018-L), var(--t018-rim-light), transparent 42%), linear-gradient(var(--t018-rim-base), var(--t018-rim-base));
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-clip: content-box, border-box; mask-composite: exclude;
+  opacity: calc(.6 + var(--t018-on) * .4);
+}
+
+/* 印刷层：正面 */
+.t018-print { display: flex; flex-direction: column; padding: 16px; }
+.t018-top { display: flex; align-items: center; justify-content: space-between; height: 25px; }
+.t018-brand { font: 650 13px/1 var(--font); letter-spacing: .01em; }
+.t018-tag { font: 500 8.5px/1 var(--mono); letter-spacing: .14em; color: var(--t018-ink2); }
+.t018-seal {
+  width: 25px; height: 25px; border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle, rgb(255 255 255 / .35) 0 1px, transparent 1px 3.5px),
+    conic-gradient(from calc(var(--t018-sa, 0) * 1deg), rgb(255 154 200), rgb(255 224 138), rgb(164 255 207), rgb(143 220 255), rgb(183 155 255), rgb(255 154 200), rgb(255 224 138), rgb(164 255 207), rgb(143 220 255), rgb(183 155 255), rgb(255 154 200));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .6);
+}
+.t018-win { position: relative; height: 148px; margin-top: 10px; padding: 4px; border-radius: 10px; background: var(--t018-frame-bg); box-shadow: inset 0 0 0 1px var(--t018-frame-line); }
+.t018-view { position: relative; height: 100%; border-radius: 6px; overflow: hidden; isolation: isolate; color: var(--t018-win-ink); text-shadow: none; }
+.t018-pic { position: absolute; inset: -100px; background: var(--t018-dots, none), var(--t018-pic); background-size: 14px 14px, auto; will-change: transform; }
+.t018-shine { position: absolute; inset: 0; background: var(--t018-shine, none); }
+.t018-layer { position: absolute; left: 50%; top: 50%; width: 128px; height: 128px; margin: -64px 0 0 -64px; will-change: transform; }
+.t018-layer svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.t018-corner { position: absolute; font: 500 8.5px/1 var(--mono); letter-spacing: .06em; opacity: .78; }
+.t018-name { margin: 16px 0 0; font: 400 30px/1.05 var(--serif); letter-spacing: .02em; }
+.t018-role { margin-top: 6px; font: 500 8.5px/1 var(--mono); letter-spacing: .16em; color: var(--t018-ink2); }
+.t018-foot { margin-top: auto; padding-top: 9px; display: flex; justify-content: space-between; font-size: 10.5px; line-height: 1; color: var(--t018-ink2); border-top: 1px solid color-mix(in srgb, var(--t018-ink) 14%, transparent); }
+/* 背面 */
+.t018-qr { align-self: center; margin-top: 24px; width: 124px; padding: 9px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / .06); }
+.t018-qr svg { display: block; width: 100%; }
+.t018-scan { margin-top: 14px; text-align: center; font: 600 14px/1.2 var(--font); }
+.t018-terms { margin-top: 6px; text-align: center; font-size: 10.5px; line-height: 1.5; color: var(--t018-ink2); }
+
+/* ---- 材质 ---- */
+.t018-face[data-finish="prism"] {
+  --t018-ink: rgb(244 244 246); --t018-win-ink: rgb(244 244 246);
+  --t018-frame-bg: rgb(140 170 255 / .1); --t018-frame-line: rgb(170 200 255 / .28);
+  --t018-pic: linear-gradient(170deg, rgb(59 98 230), rgb(42 63 191) 55%, rgb(58 47 168));
+  --t018-dots: radial-gradient(circle, rgb(255 255 255 / .16) 0 .8px, transparent 1.3px);
+  --t018-shine:
+    radial-gradient(46% 50% at var(--t018-L), rgb(255 175 235 / .55), rgb(255 175 235 / .4) 18%, rgb(255 175 235 / .22) 38%, rgb(255 175 235 / .09) 60%, rgb(255 175 235 / .02) 82%, transparent),
+    radial-gradient(54% 56% at calc((100 - var(--t018-lx)) * 1%) 74%, rgb(125 225 255 / .45), rgb(125 225 255 / .32) 18%, rgb(125 225 255 / .17) 38%, rgb(125 225 255 / .07) 60%, rgb(125 225 255 / .015) 82%, transparent),
+    radial-gradient(70% 55% at 30% 100%, rgb(150 255 210 / .3), transparent 75%);
+}
+.t018-face[data-finish="prism"] .t018-art { background: radial-gradient(60% 40% at 50% 0%, rgb(90 150 255 / .55), transparent), linear-gradient(170deg, rgb(13 35 168), rgb(8 18 102) 55%, rgb(22 15 92)); }
+.t018-face[data-finish="prism"] .t018-foil {
+  padding: 2px; background: radial-gradient(at var(--t018-L), rgb(170 220 255 / .9), transparent 60%);
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-clip: content-box, border-box; mask-composite: exclude;
+  opacity: calc(.15 + var(--t018-on) * .45);
+}
+.t018-face[data-finish="prism"] .t018-glare { opacity: calc(.25 + var(--t018-on) * .45); }
+
+.t018-face[data-finish="rainbow"] {
+  --t018-ink: rgb(245 245 247); --t018-win-ink: rgb(245 245 247);
+  --t018-frame-bg: rgb(255 255 255 / .05); --t018-frame-line: rgb(255 255 255 / .16);
+  --t018-pic: radial-gradient(80% 70% at 50% 45%, rgb(38 40 50), rgb(16 17 22));
+  --t018-dots: radial-gradient(circle, rgb(255 255 255 / .14) 0 .8px, transparent 1.3px);
+}
+.t018-face[data-finish="rainbow"] .t018-art { background: radial-gradient(130% 80% at 25% 0%, rgb(59 62 76), rgb(27 28 35) 62%); }
+.t018-face[data-finish="rainbow"] .t018-foil {
+  background:
+    repeating-linear-gradient(125deg, transparent 0 2px, rgb(0 0 0 / .3) 2px 3px),
+    repeating-linear-gradient(115deg, rgb(255 95 126) 0%, rgb(255 184 107) 2.6%, rgb(244 255 107) 5.2%, rgb(107 255 181) 7.8%, rgb(95 210 255) 10.4%, rgb(139 123 255) 13%, rgb(255 107 214) 15.6%, rgb(255 95 126) 18%);
+  background-size: auto, 200% 200%; background-position: 0 0, var(--t018-L);
+  mix-blend-mode: color-dodge; filter: brightness(.72) saturate(1.25);
+  mask-image: radial-gradient(farthest-corner at var(--t018-L), #000 5%, rgb(0 0 0 / .16) 72%);
+  opacity: calc(.3 + var(--t018-on) * .6);
+}
+
+.t018-face[data-finish="pearl"] {
+  --t018-ink: rgb(23 21 46); --t018-win-ink: rgb(255 255 255);
+  --t018-rim-base: rgb(60 50 120 / .06); --t018-rim-light: rgb(255 255 255 / .95);
+  --t018-frame-bg: rgb(60 50 120 / .05); --t018-frame-line: rgb(60 50 120 / .12);
+  --t018-pic: linear-gradient(165deg, rgb(178 168 240), rgb(126 114 218));
+  --t018-dots: radial-gradient(circle, rgb(255 255 255 / .28) 0 .8px, transparent 1.3px);
+  --t018-shine: radial-gradient(50% 55% at var(--t018-L), rgb(255 255 255 / .28), transparent);
+}
+.t018-face[data-finish="pearl"] .t018-art { background: linear-gradient(160deg, rgb(253 252 255), rgb(241 238 248)); }
+.t018-face[data-finish="pearl"] .t018-foil {
+  background: linear-gradient(115deg, rgb(255 196 225) 0%, rgb(201 184 255) 12%, rgb(180 233 255) 24%, rgb(194 255 216) 36%, rgb(255 243 184) 48%, rgb(255 196 225) 50%, rgb(201 184 255) 62%, rgb(180 233 255) 74%, rgb(194 255 216) 86%, rgb(255 243 184) 98%);
+  background-size: 260% 260%; background-position: var(--t018-L);
+  mix-blend-mode: multiply;
+  mask-image: radial-gradient(70% 60% at 50% 45%, rgb(0 0 0 / .35) 30%, #000 100%);
+  opacity: calc(.7 + var(--t018-on) * .3);
+}
+.t018-face[data-finish="pearl"] .t018-glare {
+  background: radial-gradient(farthest-corner at 50% 50%, rgb(255 255 255 / .9), transparent 55%);
+  mix-blend-mode: soft-light; opacity: calc(.5 + var(--t018-on) * .5);
+}
+.t018-face[data-finish="pearl"] .t018-qr { box-shadow: 0 0 0 1px rgb(60 50 120 / .12); }
+
+.t018-face[data-finish="sparkle"] {
+  --t018-ink: rgb(238 240 255); --t018-win-ink: rgb(238 240 255);
+  --t018-frame-bg: rgb(160 175 255 / .07); --t018-frame-line: rgb(170 185 255 / .2);
+  --t018-pic: radial-gradient(90% 80% at 50% 30%, rgb(30 38 86), rgb(10 13 32));
+  --t018-dots: radial-gradient(circle, rgb(255 255 255 / .16) 0 .8px, transparent 1.3px);
+}
+.t018-face[data-finish="sparkle"] .t018-art { background: radial-gradient(120% 80% at 75% 5%, rgb(40 51 106), rgb(16 20 43) 65%); }
+/* Prompt 没给 Sparkle 镭射的不透明度，demo 用 .5 + on·.5 */
+.t018-face[data-finish="sparkle"] .t018-foil { mix-blend-mode: screen; opacity: calc(.5 + var(--t018-on) * .5); }
+.t018-face[data-finish="sparkle"] .t018-foil::before,
+.t018-face[data-finish="sparkle"] .t018-foil::after {
+  content: "";
+  mask-image: var(--t018-glitter), radial-gradient(at var(--t018-L), #000, rgb(0 0 0 / .3) 45%, rgb(0 0 0 / .12));
+  mask-size: 240px 240px, 100% 100%; mask-repeat: repeat, no-repeat; mask-composite: intersect;
+  background-size: 260% 260%;
+}
+.t018-face[data-finish="sparkle"] .t018-foil::before {
+  background-image: repeating-linear-gradient(60deg, rgb(255 139 210) 0 3%, transparent 5% 8%, rgb(139 243 255) 10% 13%, transparent 15% 18%, rgb(255 243 139) 20% 23%, transparent 25% 28%);
+  background-position: calc(var(--t018-lx) * 1.6%) calc(var(--t018-ly) * 1%);
+}
+.t018-face[data-finish="sparkle"] .t018-foil::after {
+  background-image: repeating-linear-gradient(-35deg, rgb(169 139 255) 0 3%, transparent 5% 9%, rgb(139 255 196) 11% 14%, transparent 16% 20%, rgb(255 255 255) 22% 24%, transparent 26% 30%);
+  background-position: calc((100 - var(--t018-lx)) * 1%) calc(var(--t018-ly) * 1.4%);
+  mask-position: 117px 71px, 0 0;
+}
+
+.t018-face[data-finish="chrome"] {
+  --t018-ink: rgb(27 29 36); --t018-win-ink: rgb(232 234 240);
+  --t018-rim-base: rgb(255 255 255 / .18); --t018-rim-light: rgb(255 255 255 / .95);
+  --t018-frame-bg: rgb(255 255 255 / .22); --t018-frame-line: rgb(60 64 76 / .22);
+  --t018-pic: linear-gradient(160deg, rgb(72 78 92), rgb(30 33 42));
+  --t018-dots: radial-gradient(circle, rgb(255 255 255 / .14) 0 .8px, transparent 1.3px);
+}
+.t018-face[data-finish="chrome"] .t018-art {
+  background: linear-gradient(125deg, rgb(228 230 234) 0%, rgb(141 147 158) 16%, rgb(246 247 249) 30%, rgb(124 130 141) 46%, rgb(217 220 225) 60%, rgb(148 154 165) 76%, rgb(241 242 244) 100%);
+  background-size: 220% 220%; background-position: calc((100 - var(--t018-lx)) * 1%) calc((100 - var(--t018-ly)) * 1%);
+}
+.t018-face[data-finish="chrome"] .t018-foil {
+  background: linear-gradient(115deg, rgb(255 143 199), rgb(255 226 143) 14%, rgb(149 255 208) 28%, rgb(143 214 255) 42%, rgb(192 155 255) 56%, rgb(255 143 199) 70%, rgb(255 226 143) 84%, rgb(149 255 208) 98%);
+  background-size: 240% 240%; background-position: var(--t018-L);
+  mix-blend-mode: overlay; opacity: calc(.3 + var(--t018-on) * .35);
+}
+.t018-face[data-finish="chrome"] .t018-glare {
+  background: radial-gradient(farthest-corner at 50% 50%, rgb(255 255 255 / .85), rgb(255 255 255 / .1) 30%, rgb(0 0 0 / .18) 95%);
+  mix-blend-mode: soft-light;
+}
+.t018-face[data-finish="chrome"] .t018-print { text-shadow: 0 -1px 0 rgb(60 64 76 / .55), 0 1px 0 rgb(255 255 255 / .95); }
+
+.t018-face[data-finish="etched"] {
+  --t018-ink: rgb(237 237 238); --t018-win-ink: rgb(237 237 238);
+  --t018-rings-at: 50% 35.4%;
+  --t018-frame-bg: rgb(255 255 255 / .03); --t018-frame-line: rgb(255 255 255 / .09);
+  --t018-pic: radial-gradient(70% 60% at 50% 35%, rgb(29 29 33), rgb(15 15 17));
+}
+.t018-face[data-finish="etched"] .t018-art { background: repeating-radial-gradient(circle at var(--t018-rings-at), rgb(255 255 255 / .05) 0 1.2px, transparent 1.6px 7px), rgb(18 18 20); }
+.t018-face[data-finish="etched"] .t018-foil {
+  background: linear-gradient(115deg, rgb(255 95 126), rgb(255 184 107) 10%, rgb(244 255 107) 20%, rgb(107 255 181) 30%, rgb(95 210 255) 40%, rgb(139 123 255) 50%, rgb(255 95 126) 60%, rgb(255 184 107) 70%, rgb(244 255 107) 80%, rgb(107 255 181) 90%, rgb(95 210 255) 100%);
+  background-size: 300% 300%; background-position: var(--t018-L);
+  mask-image: repeating-radial-gradient(circle at var(--t018-rings-at), #000 0 1.2px, transparent 1.6px 7px), radial-gradient(at var(--t018-L), #000, rgb(0 0 0 / .5) 18%, transparent 42%);
+  mask-composite: intersect;
+  opacity: calc(.25 + var(--t018-on) * .75);
+}
+.t018-face[data-finish="etched"] .t018-glare { opacity: calc(.2 + var(--t018-on) * .4); }
+
+.t018-edge[data-finish="prism"] { --t018-edge-c: rgb(26 42 138); }
+.t018-edge[data-finish="rainbow"] { --t018-edge-c: rgb(42 44 53); }
+.t018-edge[data-finish="pearl"] { --t018-edge-c: rgb(230 226 242); }
+.t018-edge[data-finish="sparkle"] { --t018-edge-c: rgb(26 32 72); }
+.t018-edge[data-finish="chrome"] { --t018-edge-c: rgb(180 184 194); }
+.t018-edge[data-finish="etched"] { --t018-edge-c: rgb(27 27 30); }
+
+.t018-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* 控件 */
+.t018-panel { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+.t018-row { display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 8px; }
+.t018-row > span { font-size: 13px; color: var(--muted); }
+.t018-row .seg { justify-self: start; }
+.t018-row .seg.t018-grid { display: grid; grid-template-columns: repeat(3, 1fr); justify-self: stretch; }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="017-loading-states.html">← 017</a></span></nav>
+<section class="tip" id="t018">
+  <div class="tip-h"><span class="no">018</span><h2>镭射卡片：随指针倾斜、光随角度走、能翻面的 3D 卡</h2><a class="src" href="https://x.com/Kubai087/status/2121892029403922717" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">卡朝指针倾斜，镭射、高光和亮边跟着光点走；点击或按 Enter 翻到背面。</p>
+  <div class="stage t018-stage">
+    <div class="t018-scene" id="t018-scene">
+      <canvas class="t018-fluid" hidden></canvas>
+      <div class="t018-glow" hidden></div>
+      <div class="t018-persp" id="t018-hit">
+        <div class="t018-shadow"></div>
+        <div class="t018-card" id="t018-card" role="button" tabindex="0" aria-pressed="false">
+          <div class="t018-edge" data-finish="prism" hidden></div>
+          <div class="t018-face t018-front" data-finish="prism">
+            <div class="t018-art"></div>
+            <div class="t018-foil"></div>
+            <div class="t018-print">
+              <div class="t018-top"><span class="t018-brand">✦ Atlas</span><span class="t018-seal" aria-hidden="true"></span></div>
+              <div class="t018-win">
+                <div class="t018-view" aria-hidden="true">
+                  <div class="t018-pic" data-depth="90"></div>
+                  <div class="t018-shine"></div>
+                  <div class="t018-layer" data-depth="50" data-spin="9"><svg viewBox="-64 -64 128 128" id="t018-dial"></svg></div>
+                  <div class="t018-layer" data-depth="34"><svg viewBox="-64 -64 128 128"><circle r="42" fill="none" stroke="currentColor" stroke-opacity=".38" stroke-width=".8"/><circle r="40" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width="3"/></svg></div>
+                  <div class="t018-layer" data-depth="20" data-spin="-18"><svg viewBox="-64 -64 128 128"><circle r="34" fill="none" stroke="currentColor" stroke-opacity=".55" stroke-width=".9" stroke-dasharray="1.6 3.4"/></svg></div>
+                  <div class="t018-layer" data-depth="-12" data-needle><svg viewBox="-64 -64 128 128">
+                    <path d="M0-30 5-5 0 0Z" fill="currentColor"/><path d="M0-30-5-5 0 0Z" fill="currentColor" fill-opacity=".62"/>
+                    <path d="M0 30-5 5 0 0Z" fill="currentColor"/><path d="M0 30 5 5 0 0Z" fill="currentColor" fill-opacity=".62"/>
+                    <path d="M16 0 3 3 0 0Z" fill="currentColor" fill-opacity=".85"/><path d="M16 0 3-3 0 0Z" fill="currentColor" fill-opacity=".5"/>
+                    <path d="M-16 0-3-3 0 0Z" fill="currentColor" fill-opacity=".85"/><path d="M-16 0-3 3 0 0Z" fill="currentColor" fill-opacity=".5"/>
+                    <circle r="1.6" fill="currentColor"/></svg></div>
+                  <span class="t018-corner" style="left:9px;top:9px">NO. 0018</span>
+                  <span class="t018-corner" style="left:9px;bottom:9px">31.23° N</span>
+                  <span class="t018-corner" style="right:9px;bottom:9px">121.47° E</span>
+                </div>
+              </div>
+              <p class="t018-name">林知夏</p>
+              <span class="t018-role">创始会员 · FOUNDING MEMBER</span>
+              <div class="t018-foot"><span>2026 年加入</span><span>上海</span></div>
+            </div>
+            <div class="t018-glare"></div>
+            <div class="t018-rim"></div>
+          </div>
+          <div class="t018-face t018-back" data-finish="prism" aria-hidden="true" style="visibility:hidden">
+            <div class="t018-art"></div>
+            <div class="t018-foil"></div>
+            <div class="t018-print">
+              <div class="t018-top"><span class="t018-brand">✦ Atlas</span><span class="t018-tag">会员卡</span></div>
+              <div class="t018-qr"><svg id="t018-qr" viewBox="0 0 25 25" role="img" aria-label="会员二维码" shape-rendering="crispEdges"></svg></div>
+              <p class="t018-scan">入场时出示</p>
+              <p class="t018-terms">仅限本人使用<br>有效期至 2027.12</p>
+              <div class="t018-foot"><span>林知夏</span><span>NO. 0018</span></div>
+            </div>
+            <div class="t018-glare"></div>
+            <div class="t018-rim"></div>
+          </div>
+        </div>
+      </div>
+      <p class="t018-sr" id="t018-live" aria-live="polite"></p>
+    </div>
+    <div class="t018-panel">
+      <div class="t018-row"><span>材质</span><div class="seg t018-grid" id="t018-finish"><button data-v="prism" aria-pressed="true">Prism</button><button data-v="rainbow" aria-pressed="false">Rainbow</button><button data-v="pearl" aria-pressed="false">Pearl</button><button data-v="sparkle" aria-pressed="false">Sparkle</button><button data-v="chrome" aria-pressed="false">Chrome</button><button data-v="etched" aria-pressed="false">Etched</button></div></div>
+      <div class="t018-row"><span>手感</span><div class="seg" id="t018-feel"><button data-v="quiet" aria-pressed="false">安静</button><button data-v="standard" aria-pressed="true">标准</button><button data-v="lively" aria-pressed="false">活泼</button></div></div>
+      <div class="t018-row"><span>交互</span><div class="seg" id="t018-inter"><button data-v="tilt" aria-pressed="true">倾斜</button><button data-v="sway" aria-pressed="true">晃动</button><button data-v="turn" aria-pressed="true">翻面</button></div></div>
+      <div class="t018-row"><span>厚度</span><div class="seg" id="t018-thick"><button data-v="thin" aria-pressed="false">薄 6</button><button data-v="standard" aria-pressed="true">标准 10</button><button data-v="thick" aria-pressed="false">厚 16</button></div></div>
+      <div class="t018-row"><span>翻面弹簧</span><div class="seg" id="t018-flip"><button data-v="soft" aria-pressed="false">柔</button><button data-v="standard" aria-pressed="true">标准</button><button data-v="crisp" aria-pressed="false">利落</button></div></div>
+      <div class="t018-row"><span>景深</span><div class="seg" id="t018-depth"><button data-v="none" aria-pressed="false">无</button><button data-v="subtle" aria-pressed="false">轻微</button><button data-v="standard" aria-pressed="true">标准</button></div></div>
+      <div class="t018-row"><span>背景</span><div class="seg" id="t018-bg"><button data-v="page" aria-pressed="true">不变</button><button data-v="glow" aria-pressed="false">光晕</button><button data-v="fluid" aria-pressed="false">流体</button></div></div>
+      <div class="t018-row"><span>页面</span><div class="seg" id="t018-page"><button data-v="light" aria-pressed="false">浅</button><button data-v="dark" aria-pressed="true">深</button></div></div>
+      <div class="t018-row"><span>速度</span><div class="seg" id="t018-speed"><button data-v="1" aria-pressed="true">1×</button><button data-v=".25" aria-pressed="false">¼×</button></div></div>
+    </div>
+  </div>
+  <ul class="specs"><li>倾斜 12° · 透视 1600px · 弹簧 140 / 15</li><li>光点弹簧 160 / 25.3 · 静止 (34%, 22%)</li><li>悬停 1 − e^(−7dt)</li><li>晃动 2.2° + 0.8° / 3.2° + 0.9°</li><li>高光 白 60 → 14 → 黑 30 · overlay · .35 + .65on</li><li>亮边 1.5px · 42% · .6 + .4on</li><li>徽章 44 · 角 = atan2 × 1.5 + rotateY × 6</li><li>翻面 70 / 11 · 抬起 40 · 厚 10 × 10 片</li><li>景深 90 / 50 / 34 / 20 / −12</li><li>换材质 420ms 或侧立时换</li><li>流体 1/3 尺寸 · 30fps · 40s 一圈</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 018 镭射卡片 ---------- */
+(() => {
+  const scene = $('#t018-scene'), hit = $('#t018-hit'), card = $('#t018-card'), live = $('#t018-live');
+  const front = $('.t018-front', card), back = $('.t018-back', card), edge = $('.t018-edge', card);
+  const shadow = $('.t018-shadow', scene), glow = $('.t018-glow', scene), fluid = $('.t018-fluid', scene);
+  const seal = $('.t018-seal', front), view = $('.t018-view', front);
+  const layers = $$('[data-depth]', front).map(el => ({ el, d: +el.dataset.depth, spin: +(el.dataset.spin || 0), needle: el.hasAttribute('data-needle') }));
+
+  const FEEL = { quiet: { tilt: 6, k: 120, c: 18, sway: .5, cap: .7 }, standard: { tilt: 12, k: 140, c: 15, sway: 1, cap: 1 }, lively: { tilt: 16, k: 180, c: 12, sway: 1.35, cap: 1 } };
+  const THICK = { thin: { t: 6, n: 6, lift: 30 }, standard: { t: 10, n: 10, lift: 40 }, thick: { t: 16, n: 16, lift: 56 } };
+  const FLIP = { soft: { k: 55, c: 9 }, standard: { k: 70, c: 11 }, crisp: { k: 110, c: 18 } };
+  const DEPTH = { none: 0, subtle: .5, standard: 1 };
+  const FINISH = {
+    prism: { hue: 228, pal: [[10, 20, 80], [58, 42, 156], [26, 108, 192]] },
+    rainbow: { hue: 285, pal: [[44, 12, 64], [12, 68, 80], [90, 32, 52]] },
+    pearl: { hue: 300, pal: [[51, 40, 94], [28, 74, 74], [92, 44, 80]] },
+    sparkle: { hue: 235, pal: [[12, 20, 56], [38, 51, 122], [74, 58, 22]] },
+    chrome: { hue: 200, pal: [[24, 28, 36], [44, 54, 70], [22, 64, 74]] },
+    etched: { hue: 190, pal: [[13, 15, 18], [26, 36, 40], [38, 42, 50]] },
+  };
+  const PAGE = { dark: [14, 15, 19], light: [238, 240, 244] };
+  const LIGHT_K = 160, LIGHT_C = 2 * Math.sqrt(160);
+
+  const opt = { finish: 'prism', feel: 'standard', thick: 'standard', flip: 'standard', depth: 'standard', bg: 'page', page: isDarkTheme() ? 'dark' : 'light', tilt: true, sway: true, turn: true, speed: 1 };
+  const s = { t: 0, rx: 0, ry: 0, vrx: 0, vry: 0, lx: 34, ly: 22, vlx: 0, vly: 0, on: 0, turn: 0, vturn: 0, turnTo: 0, needle: 0, vneedle: 0, hover: false, fx: .5, fy: .5 };
+  let pending = null, needleC = null;
+
+  // 只在值变化时写：'--x' 写自定义属性，hidden / ariaHidden 写元素属性，其余写 style
+  const cache = new WeakMap();
+  function put(el, prop, val) {
+    let m = cache.get(el); if (!m) cache.set(el, m = {});
+    if (m[prop] === val) return;
+    m[prop] = val;
+    if (prop.startsWith('--')) el.style.setProperty(prop, val);
+    else if (prop === 'hidden' || prop === 'ariaHidden') el[prop] = val;
+    else el.style[prop] = val;
+  }
+  const r2 = v => Math.round(v * 100) / 100;
+  const rad = d => d * Math.PI / 180;
+
+  // 种子随机数：闪粉贴图和二维码每次一样
+  let seed = 7;
+  const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+
+  // Sparkle 闪粉：240px 贴图，约 950 个点，半径 0.45–1.85（大多小），alpha 0.35–1；跨边的点在对边补画，贴图无缝
+  {
+    const c = document.createElement('canvas'); c.width = c.height = 240;
+    const g = c.getContext('2d');
+    for (let i = 0; i < 950; i++) {
+      const r = .45 + 1.4 * rnd() ** 3, a = .35 + .65 * rnd(), x = rnd() * 240, y = rnd() * 240;
+      g.fillStyle = `rgba(0,0,0,${a.toFixed(2)})`;
+      for (const ox of [-240, 0, 240]) for (const oy of [-240, 0, 240]) {
+        if (x + ox < -2 || x + ox > 242 || y + oy < -2 || y + oy > 242) continue;
+        g.beginPath(); g.arc(x + ox, y + oy, r, 0, 7); g.fill();
+      }
+    }
+    scene.style.setProperty('--t018-glitter', `url(${c.toDataURL()})`);
+  }
+
+  // 表盘刻度
+  {
+    let d = '<circle r="56" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width=".8"/>';
+    for (let i = 0; i < 72; i++) {
+      const a = i * 5 * Math.PI / 180, r1 = i % 18 === 0 ? 45 : i % 6 === 0 ? 49 : 52;
+      d += `<line x1="${(Math.sin(a) * r1).toFixed(2)}" y1="${(-Math.cos(a) * r1).toFixed(2)}" x2="${(Math.sin(a) * 55).toFixed(2)}" y2="${(-Math.cos(a) * 55).toFixed(2)}" stroke="currentColor" stroke-opacity="${i % 6 === 0 ? .7 : .35}" stroke-width="${i % 18 === 0 ? 1.1 : .6}"/>`;
+    }
+    $('#t018-dial').innerHTML = d;
+  }
+
+  // 背面的二维码：示意图案（定位块 + 种子随机模块），不编码内容
+  {
+    const N = 25, on = [];
+    const finder = (x0, y0) => { for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) on.push([x0 + x, y0 + y, Math.max(Math.abs(x - 3), Math.abs(y - 3)) !== 2]); };
+    const inFinder = (x, y) => (x < 8 && y < 8) || (x > N - 9 && y < 8) || (x < 8 && y > N - 9);
+    finder(0, 0); finder(N - 7, 0); finder(0, N - 7);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      if (inFinder(x, y)) continue;
+      const timing = (x === 6 || y === 6) ? (x + y) % 2 === 0 : rnd() < .5;
+      on.push([x, y, timing]);
+    }
+    $('#t018-qr').innerHTML = `<path fill="#111" d="${on.filter(m => m[2]).map(([x, y]) => `M${x} ${y}h1v1h-1z`).join('')}"/>`;
+  }
+
+  // 侧边：两面之间均匀叠 n 片卡形
+  function buildEdge() {
+    const { t, n } = THICK[opt.thick];
+    card.style.setProperty('--t018-half', t / 2 + 'px');
+    edge.innerHTML = Array.from({ length: n }, (_, i) => `<i class="t018-slice" style="transform:translateZ(${(-t / 2 + t * (i + .5) / n).toFixed(2)}px)"></i>`).join('');
+  }
+  buildEdge();
+
+  const showingFront = () => Math.cos(rad(s.turn)) >= 0;
+  const isTurning = () => Math.abs(s.turnTo - s.turn) > .3 || Math.abs(s.vturn) > 1;
+
+  function applyFinish(v, fade) {
+    if (fade) {
+      const face = showingFront() ? front : back;
+      const ghost = face.cloneNode(true);
+      ghost.classList.add('t018-ghost'); ghost.setAttribute('aria-hidden', 'true');
+      $$('[id]', ghost).forEach(el => el.removeAttribute('id'));
+      card.append(ghost);
+      ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 420, easing: 'ease' }).finished.then(() => ghost.remove());
+    }
+    front.dataset.finish = back.dataset.finish = edge.dataset.finish = v;
+  }
+  function setFinish(v) {
+    opt.finish = v;
+    put(glow, '--t018-hue', String(FINISH[v].hue));
+    // 正在翻面就挂起，等侧立时换；否则 420ms 交叉淡化
+    if (isTurning()) pending = v; else applyFinish(v, true);
+  }
+
+  function flip() {
+    if (!opt.turn) return;
+    s.turnTo = s.turnTo ? 0 : 180;
+    card.setAttribute('aria-pressed', String(!!s.turnTo));
+    live.textContent = s.turnTo ? '背面：入场二维码，仅限本人使用，有效期至 2027.12' : '正面：会员卡';
+  }
+  function setTurnable(on) {
+    if (!on && s.turnTo) flip(); // 关掉翻面前先转回正面
+    opt.turn = on;
+    if (on) { card.setAttribute('role', 'button'); card.tabIndex = 0; card.setAttribute('aria-pressed', String(!!s.turnTo)); }
+    else { card.removeAttribute('role'); card.removeAttribute('tabindex'); card.removeAttribute('aria-pressed'); }
+  }
+
+  // 指针：热区是不随卡转动的透视容器
+  let down = null;
+  function point(e) {
+    const r = hit.getBoundingClientRect();
+    s.fx = clamp((e.clientX - r.left) / r.width); s.fy = clamp((e.clientY - r.top) / r.height);
+    if (!s.hover) needleC = needleCenter();
+    s.hover = true;
+  }
+  hit.addEventListener('pointerenter', point);
+  hit.addEventListener('pointermove', point);
+  hit.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; point(e); });
+  hit.addEventListener('pointerleave', () => { s.hover = false; });
+  hit.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') s.hover = false; });
+  hit.addEventListener('pointercancel', () => { s.hover = false; });
+  card.addEventListener('click', e => {
+    if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 8) return; // 拖动后的点击不算翻面
+    flip();
+  });
+  card.addEventListener('keydown', e => {
+    if (!opt.turn || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault(); flip();
+  });
+
+  // 指针中心在正面里的坐标（卡的布局不变，进入时量一次）
+  function needleCenter() {
+    let x = 0, y = 0, el = view;
+    while (el && el !== front) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
+    return [x + view.offsetWidth / 2, y + view.offsetHeight / 2];
+  }
+
+  // ---- 流体 ----
+  const gl = fluid.getContext('webgl', { antialias: false, alpha: false });
+  let prog = null, uni = {}, pal = FINISH.prism.pal.map(c => c.map(v => v / 255)), fluidAcc = 1, flowT = 0;
+  if (gl) {
+    const vs = 'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}';
+    const fs = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform vec2 uRes, uFlow, uShift; uniform vec3 uA, uB, uC, uPage;
+float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
+  return mix(mix(h(i), h(i + vec2(1, 0)), u.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), u.x), u.y); }
+const mat2 M = mat2(1.6, 1.2, -1.2, 1.6);
+float fbm(vec2 p){ float f = 0., a = .5; for (int i = 0; i < 4; i++) { f += a * n(p); p = M * p; a *= .5; } return f; }
+void main(){
+  vec2 p = gl_FragCoord.xy / uRes.y * 1.25 + uFlow + uShift;
+  vec2 q = vec2(fbm(p), fbm(p + vec2(5.2, 1.3) - uFlow.yx));
+  vec2 r = vec2(fbm(p + 3.5 * q + vec2(1.7, 9.2) + 1.3 * uFlow), fbm(p + 3.5 * q + vec2(8.3, 2.8) - uFlow));
+  float f = fbm(p + 3. * r);
+  vec3 col = mix(uA, uB, clamp(2.4 * f * f, 0., 1.));
+  col = mix(col, uC, clamp(.95 * length(q) - .35, 0., 1.));
+  col *= .5 + 1.1 * f * f;
+  vec2 d = (gl_FragCoord.xy - uRes * vec2(.5, .44)) / uRes.y; d.y *= 1.2;
+  gl_FragColor = vec4(mix(uPage, col, smoothstep(.82, .18, length(d))), 1.);
+}`;
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return o; };
+    prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(prog);
+    if (gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      for (const k of ['uRes', 'uFlow', 'uShift', 'uA', 'uB', 'uC', 'uPage']) uni[k] = gl.getUniformLocation(prog, k);
+    } else prog = null;
+  }
+  if (!prog) { const b = $('#t018-bg [data-v="fluid"]'); b.disabled = true; b.title = '当前浏览器不支持 WebGL'; }
+  function sizeFluid() {
+    // 按 1/3 尺寸画再放大
+    const w = Math.max(1, Math.round(scene.clientWidth / 3)), h = Math.max(1, Math.round(scene.clientHeight / 3));
+    if (fluid.width !== w || fluid.height !== h) { fluid.width = w; fluid.height = h; }
+  }
+  function drawFluid(dt) {
+    const target = FINISH[opt.finish].pal;
+    const e = 1 - Math.exp(-4 * dt); // 约 1s 缓到新调色板
+    pal = pal.map((c, i) => c.map((v, j) => v + (target[i][j] / 255 - v) * e));
+    if (!reduceMotion.matches) flowT += dt;
+    fluidAcc += dt;
+    if (fluidAcc < 1 / 30) return;
+    fluidAcc = 0;
+    sizeFluid();
+    const a = flowT / 40 * Math.PI * 2, pg = PAGE[opt.page];
+    gl.viewport(0, 0, fluid.width, fluid.height);
+    gl.uniform2f(uni.uRes, fluid.width, fluid.height);
+    gl.uniform2f(uni.uFlow, .33 * Math.cos(a), .33 * Math.sin(a));
+    gl.uniform2f(uni.uShift, -s.ry * .008, s.rx * .008);
+    gl.uniform3fv(uni.uA, pal[0]); gl.uniform3fv(uni.uB, pal[1]); gl.uniform3fv(uni.uC, pal[2]);
+    gl.uniform3f(uni.uPage, pg[0] / 255, pg[1] / 255, pg[2] / 255);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  // ---- 一个 rAF 循环 ----
+  let raf = 0, last = 0, visible = false;
+  function frame(now) {
+    raf = requestAnimationFrame(frame);
+    const dt = Math.min((now - last) / 1000, 1 / 30) * opt.speed; last = now;
+    s.t += dt;
+    const f = FEEL[opt.feel], rm = reduceMotion.matches;
+
+    // 目标：指针在卡上跟指针，否则跟晃动；光点跟着走
+    let tx = 0, ty = 0, lxT = 34, lyT = 22;
+    if (s.hover) {
+      if (opt.tilt) { tx = -(s.fy * 2 - 1) * f.tilt; ty = (s.fx * 2 - 1) * f.tilt; }
+      lxT = s.fx * 100; lyT = s.fy * 100;
+    } else if (opt.sway) {
+      tx = (2.2 * Math.sin(.9 * s.t + .6) + .8 * Math.sin(2.3 * s.t)) * f.sway;
+      ty = (3.2 * Math.sin(.7 * s.t) + .9 * Math.sin(1.9 * s.t + 1.2)) * f.sway;
+      lxT = 34 + ty * 3; lyT = 22 - tx * 3;
+    }
+    if (rm) { tx = ty = 0; if (!s.hover) { lxT = 34; lyT = 22; } }
+
+    s.vrx += (f.k * (tx - s.rx) - f.c * s.vrx) * dt; s.rx += s.vrx * dt;
+    s.vry += (f.k * (ty - s.ry) - f.c * s.vry) * dt; s.ry += s.vry * dt;
+    if (rm) s.rx = s.ry = s.vrx = s.vry = 0;
+    s.vlx += (LIGHT_K * (lxT - s.lx) - LIGHT_C * s.vlx) * dt; s.lx += s.vlx * dt;
+    s.vly += (LIGHT_K * (lyT - s.ly) - LIGHT_C * s.vly) * dt; s.ly += s.vly * dt;
+    s.on += ((s.hover ? f.cap : 0) - s.on) * (1 - Math.exp(-7 * dt));
+
+    // 翻面
+    const wasFront = showingFront(), fl = FLIP[opt.flip];
+    if (rm) { s.turn = s.turnTo; s.vturn = 0; }
+    else { s.vturn += (fl.k * (s.turnTo - s.turn) - fl.c * s.vturn) * dt; s.turn += s.vturn * dt; }
+    if (pending && wasFront !== showingFront()) { applyFinish(pending, false); pending = null; } // 侧立时换材质
+    if (pending && !isTurning()) { applyFinish(pending, true); pending = null; }
+    const turning = isTurning(), lift = Math.abs(Math.sin(rad(s.turn)));
+    const th = THICK[opt.thick];
+
+    put(card, 'transform', `translateZ(${r2(lift * th.lift)}px) rotateX(${r2(s.rx)}deg) rotateY(${r2(s.ry + s.turn)}deg)`);
+    put(shadow, 'transform', `translate(${r2(-s.ry * 1.8)}px, ${r2(s.rx * 1.2 + lift * 14)}px) scaleX(${r2(1 - .45 * lift)})`);
+    put(edge, 'hidden', !turning);
+
+    // 只画朝外的一面；转动中两面都在，由 backface-visibility 裁掉
+    const fFront = turning || showingFront(), fBack = turning || !showingFront();
+    put(front, 'visibility', fFront ? '' : 'hidden'); put(back, 'visibility', fBack ? '' : 'hidden');
+    put(front, 'ariaHidden', fFront && (!turning || s.turnTo === 0) ? null : 'true');
+    put(back, 'ariaHidden', fBack && (!turning || s.turnTo === 180) ? null : 'true');
+
+    const on = r2(s.on).toString();
+    if (fFront) {
+      put(front, '--t018-lx', r2(s.lx).toString()); put(front, '--t018-ly', r2(s.ly).toString()); put(front, '--t018-on', on);
+      put($('.t018-glare', front), 'transform', `translate(${r2((s.lx - 50) / 2)}%, ${r2((s.ly - 50) / 2)}%)`);
+      put(seal, '--t018-sa', r2(Math.atan2(s.ly - 50, s.lx - 50) * 180 / Math.PI * 1.5 + s.ry * 6).toString());
+
+      // 景深：x = −d·sin(rotateY + 翻面角)，y = d·sin(rotateX)
+      const k = DEPTH[opt.depth], sy = Math.sin(rad(s.ry + s.turn)), sx = Math.sin(rad(s.rx));
+      let nT;
+      if (rm) nT = 0;
+      else if (s.hover && needleC) nT = Math.atan2(s.fx * front.offsetWidth - needleC[0], -(s.fy * front.offsetHeight - needleC[1])) * 180 / Math.PI;
+      else nT = 12 * Math.sin(.77 * s.t) + 6 * Math.sin(2.16 * s.t);
+      const diff = ((nT - s.needle) % 360 + 540) % 360 - 180; // 走短的一边
+      s.vneedle += (60 * diff - 5.5 * s.vneedle) * dt; s.needle += s.vneedle * dt;
+      if (rm) { s.needle = 0; s.vneedle = 0; }
+      for (const L of layers) {
+        const d = L.d * k;
+        const rot = L.needle ? s.needle : rm ? 0 : L.spin * s.t;
+        put(L.el, 'transform', `translate3d(${r2(-d * sy)}px, ${r2(d * sx)}px, 0)${rot ? ` rotate(${r2(rot % 360)}deg)` : ''}`);
+      }
+    }
+    if (fBack) {
+      const mlx = r2(100 - s.lx); // 背面光点镜像
+      put(back, '--t018-lx', mlx.toString()); put(back, '--t018-ly', r2(s.ly).toString()); put(back, '--t018-on', on);
+      put($('.t018-glare', back), 'transform', `translate(${r2((mlx - 50) / 2)}%, ${r2((s.ly - 50) / 2)}%)`);
+    }
+
+    if (opt.bg !== 'page') put(glow, 'opacity', r2((.04 + .12 * s.on) / .3).toString());
+    if (opt.bg === 'fluid' && prog) drawFluid(dt);
+  }
+  function run() { if (!raf && visible) { last = performance.now(); raf = requestAnimationFrame(frame); } }
+  function stop() { cancelAnimationFrame(raf); raf = 0; }
+  new IntersectionObserver(([e]) => { visible = e.isIntersecting; visible ? run() : stop(); }).observe(scene);
+
+  // ---- 控件 ----
+  seg($('#t018-finish'), setFinish);
+  seg($('#t018-feel'), v => { opt.feel = v; });
+  seg($('#t018-thick'), v => { opt.thick = v; buildEdge(); });
+  seg($('#t018-flip'), v => { opt.flip = v; });
+  seg($('#t018-depth'), v => { opt.depth = v; });
+  seg($('#t018-bg'), v => {
+    opt.bg = v; glow.hidden = v === 'page'; fluid.hidden = v !== 'fluid';
+    if (v === 'fluid') fluidAcc = 1;
+  });
+  function setPage(v) {
+    opt.page = v; scene.dataset.page = v; fluidAcc = 1;
+    $$('#t018-page button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+  }
+  seg($('#t018-page'), setPage);
+  setPage(opt.page);
+  seg($('#t018-speed'), v => { opt.speed = +v; });
+  $('#t018-inter').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const on = b.getAttribute('aria-pressed') !== 'true';
+    b.setAttribute('aria-pressed', String(on));
+    if (b.dataset.v === 'turn') setTurnable(on); else opt[b.dataset.v] = on;
+  });
+  window.t018 = { s, opt }; // 调试用：读状态、手动设翻面角
+})();
+</script>
+</body>
+</html>

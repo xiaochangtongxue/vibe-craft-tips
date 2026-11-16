@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>015 · 连续性：点到的元素直接变成下一个状态</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 015 连续性 ---------- */
+/* 一块手机尺寸的面板，七个场景各占满它；移动的元素 transform-origin 都是左上角，外框长大用 clip-path */
+@property --t015-pl { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --t015-pr { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --t015-pt { syntax: '<length>'; inherits: false; initial-value: 0px; }
+.t015-dev {
+  --t015-bg: #f2f2f7; --t015-card: #ffffff; --t015-ink: #111216; --t015-mute: #6e6e76; --t015-faint: #a6a6ad;
+  --t015-line: rgb(60 60 67 / .14); --t015-fill: rgb(118 118 128 / .12); --t015-tint: #0a7aff; --t015-bar: rgb(248 248 250 / .97);
+  /* 高度跟着窗口走：整块面板（含底部的播放条、标签栏）一屏内看得全 */
+  position: relative; width: 100%; max-width: 390px; height: clamp(520px, 100svh - 150px, 720px); margin: 18px auto 0; border-radius: 28px; overflow: hidden; isolation: isolate;
+  background: var(--t015-bg); color: var(--t015-ink); box-shadow: 0 0 0 1px var(--line), 0 24px 48px -28px rgb(15 23 42 / .3);
+  font: 15px/1.4 var(--font); -webkit-font-smoothing: antialiased; container-type: size;
+}
+.t015-dev[data-mode="dark"] {
+  --t015-bg: #000000; --t015-card: #1c1c1e; --t015-ink: #f2f2f5; --t015-mute: #98989f; --t015-faint: #636369;
+  --t015-line: rgb(84 84 88 / .55); --t015-fill: rgb(118 118 128 / .24); --t015-tint: #3b9bff; --t015-bar: rgb(22 22 24 / .97);
+}
+.t015-dev button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+.t015-dev svg { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.t015-scene, .t015-pg { position: absolute; inset: 0; }
+.t015-pg { background: var(--t015-bg); }
+.t015-over { z-index: 5; background: none; }
+.t015-scroll { position: absolute; inset: 0; overflow-y: auto; padding: 18px 0 96px; scrollbar-width: none; }
+#t015-nd-scroll { padding-top: 52px; }   /* 详情页顶上有返回栏 */
+.t015-scroll::-webkit-scrollbar { display: none; }
+.t015-m { transform-origin: 0 0; }
+.t015-large { margin: 0; padding: 4px 20px 10px; font: 700 34px/1.2 var(--font); letter-spacing: -.02em; }
+.t015-x { position: absolute; top: 14px; right: 14px; z-index: 3; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--t015-fill); color: var(--t015-ink); }
+.t015-x svg { width: 15px; height: 15px; stroke-width: 2.6; }
+.t015-x.t015-on-img { background: rgb(0 0 0 / .4); color: #fff; }
+.t015-text { padding: 0 20px; color: var(--t015-mute); font-size: 16px; line-height: 1.65; }
+.t015-text p { margin: 0 0 14px; }
+
+/* a · 导航 */
+.t015-group { margin: 0 16px; background: var(--t015-card); border-radius: 12px; overflow: hidden; }
+.t015-row { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr) 16px; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; }
+.t015-row + .t015-row::before { content: ""; position: absolute; left: 70px; right: 0; top: 0; border-top: .5px solid var(--t015-line); }
+.t015-row:active { background: var(--t015-fill); }
+.t015-thumb { width: 44px; height: 44px; border-radius: 10px; background: var(--t015-art) center / calc(100% * 13 / 8) 100%; }
+.t015-rt { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.t015-rt b { font: 600 17px/1.3 var(--font); }
+.t015-rt small { font-size: 13px; color: var(--t015-mute); }
+.t015-row > svg { width: 16px; height: 16px; color: var(--t015-faint); stroke-width: 2.4; }
+.t015-pgbg { position: absolute; inset: 0; background: var(--t015-bg); box-shadow: -10px 0 30px rgb(0 0 0 / .12); }
+.t015-top { position: absolute; inset: 0 0 auto; height: 52px; z-index: 2; display: flex; align-items: center; padding: 0 8px; }
+/* 不用 backdrop-filter：它压在正在动的内容上，每帧都要重新模糊 */
+.t015-topbg { position: absolute; inset: 0; background: var(--t015-bar); border-bottom: .5px solid var(--t015-line); opacity: 0; }
+.t015-back { position: relative; display: flex; align-items: center; height: 44px; padding: 0 8px 0 2px; color: var(--t015-tint); font-size: 17px; }
+.t015-back svg { width: 24px; height: 24px; stroke-width: 2.6; }
+.t015-back span { display: inline-block; font-size: 17px; line-height: 1.2; }
+.t015-hero { margin: 0 16px; aspect-ratio: 13 / 8; border-radius: 16px; background: var(--t015-art) center / cover; }
+.t015-dtitle { position: relative; z-index: 3; margin: 18px 20px 8px; font: 700 30px/1.2 var(--font); letter-spacing: -.02em; }
+
+/* b · 卡片 */
+.t015-kick { display: block; padding: 0 20px; font: 600 13px/1.3 var(--font); color: var(--t015-mute); }
+.t015-feed { display: flex; flex-direction: column; gap: 20px; padding: 8px 16px 0; }
+.t015-fcard { display: block; width: 100%; border-radius: 22px; overflow: hidden; background: var(--t015-card); }
+.t015-img { display: block; aspect-ratio: 13 / 8; background: var(--t015-art) center / cover; }
+.t015-ftext { display: block; padding: 14px 16px 16px; }
+.t015-ftext small, .t015-cdtext small { display: block; font: 600 13px/1.4 var(--font); color: var(--t015-mute); }
+.t015-ftext b { display: block; margin-top: 2px; font: 700 22px/1.25 var(--font); letter-spacing: -.01em; }
+.t015-cdbox { --t015-s: 1; position: absolute; inset: 0; background: var(--t015-card); }
+.t015-cdbox .t015-scroll { padding: 0 0 40px; touch-action: pan-y; }
+/* 文字块按「卡片宽 / 面板宽」放大：缩小到卡片大小时和卡片里那一行字完全重合 */
+.t015-cdtext { padding: calc(14px / var(--t015-s)) calc(16px / var(--t015-s)) calc(16px / var(--t015-s)); }
+.t015-cdtext small { font-size: calc(13px / var(--t015-s)); }
+.t015-cdtext h3 { margin: calc(2px / var(--t015-s)) 0 0; font: 700 calc(22px / var(--t015-s))/1.25 var(--font); letter-spacing: -.01em; }
+
+/* c · 播放条 */
+.t015-plpage { transform-origin: 50% 0; }
+.t015-albums { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 4px 16px 120px; }
+.t015-album i { display: block; aspect-ratio: 1; border-radius: 10px; background: var(--t015-art); }
+.t015-album b { display: block; margin-top: 6px; font: 500 14px/1.3 var(--font); }
+.t015-album small { color: var(--t015-mute); font-size: 13px; }
+.t015-dim { position: absolute; inset: 0; z-index: 3; background: rgb(0 0 0 / .3); opacity: 0; pointer-events: none; }
+.t015-mini { position: absolute; left: 10px; right: 10px; bottom: 14px; z-index: 4; height: 60px; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 10px; border-radius: 16px; background: var(--t015-card); }
+.t015-mopen { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; height: 100%; }
+.t015-cover { flex: none; width: 40px; height: 40px; border-radius: 8px; background: linear-gradient(140deg, #ffb36b, #e2456f 50%, #5a2a8c); }
+.t015-mt { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.t015-mt b { font: 600 15px/1.3 var(--font); }
+.t015-mt small { font-size: 13px; color: var(--t015-mute); }
+.t015-ib { flex: none; width: 36px; height: 36px; display: grid; place-items: center; }
+.t015-ib svg, .t015-play svg { fill: currentColor; stroke: none; }
+.t015-ib svg { width: 22px; height: 22px; }
+.t015-play { flex: none; display: grid; place-items: center; }
+.t015-mini .t015-play { width: 32px; height: 32px; }
+.t015-mini .t015-play svg { width: 22px; height: 22px; }
+.t015-full { position: absolute; inset: 12px 0 0; z-index: 4; display: flex; flex-direction: column; align-items: center; padding: 18px 28px 0; border-radius: 22px 22px 0 0; background: var(--t015-card); touch-action: none; }
+.t015-grab { width: 36px; height: 5px; border-radius: 3px; background: var(--t015-faint); }
+.t015-down { position: absolute; top: 10px; left: 14px; width: 36px; height: 36px; display: grid; place-items: center; color: var(--t015-mute); }
+.t015-down svg { width: 24px; height: 24px; }
+/* 封面随面板高度缩放：矮面板里进度条和播放键也要露出来 */
+.t015-fcover { width: min(100%, 300px, 100cqh - 300px); aspect-ratio: 1; height: auto; margin-top: clamp(20px, 6cqh - 4px, 40px); border-radius: 14px; }
+.t015-ft { align-self: stretch; display: flex; flex-direction: column; align-items: flex-start; margin-top: clamp(16px, 5cqh - 4px, 32px); }
+.t015-ft b { font: 700 22px/1.3 var(--font); }
+.t015-ft small { font-size: 17px; color: var(--t015-mute); }
+.t015-prog { align-self: stretch; height: 6px; margin-top: 24px; border-radius: 3px; background: var(--t015-fill); overflow: hidden; }
+.t015-prog i { display: block; width: 32%; height: 100%; background: var(--t015-mute); }
+.t015-times { align-self: stretch; display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--t015-faint); }
+.t015-ctl { display: flex; align-items: center; gap: 36px; margin-top: 18px; }
+.t015-ctl .t015-ib svg { width: 34px; height: 34px; }
+.t015-ctl .t015-play { width: 64px; height: 64px; }
+.t015-ctl .t015-play svg { width: 44px; height: 44px; }
+
+/* d · 搜索 */
+.t015-sbar { position: relative; margin: 0 16px 8px; }
+.t015-field { display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 10px; border-radius: 10px; background: var(--t015-fill); clip-path: inset(0px 0px 0px 0px round 10px); color: var(--t015-mute); }
+.t015-field svg { flex: none; width: 17px; height: 17px; }
+.t015-field input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: none; font: 17px var(--font); color: var(--t015-ink); }
+.t015-field input::placeholder { color: var(--t015-mute); }
+.t015-searching .t015-field input { padding-right: 72px; }
+.t015-searching .t015-stitle { position: absolute; }
+.t015-cancel { position: absolute; top: 0; right: 0; height: 38px; padding: 0 2px 0 10px; color: var(--t015-tint); font-size: 17px; }
+.t015-people { position: relative; }
+.t015-person { display: flex; align-items: center; gap: 12px; height: 54px; padding: 0 20px; border-bottom: .5px solid var(--t015-line); background: var(--t015-bg); }
+.t015-av { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; font: 600 14px/1 var(--font); }
+.t015-none { margin: 40px 0 0; text-align: center; color: var(--t015-mute); }
+
+/* e · 图表 */
+.t015-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 6px 16px; }
+.t015-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px; border-radius: 18px; background: var(--t015-card); }
+.t015-tl { font: 600 13px/1.3 var(--font); color: var(--t015-c); }
+.t015-tn, .t015-chn { display: flex; align-items: baseline; gap: 3px; }
+.t015-tn b { font: 700 22px/1.2 var(--font); }
+.t015-tn small { font-size: 12px; line-height: 1.2; color: var(--t015-mute); }
+.t015-spark { align-self: stretch; display: flex; align-items: flex-end; gap: 4px; height: 36px; margin-top: 10px; }
+.t015-spark i, .t015-plot i { flex: 1; border-radius: 2px; background: var(--t015-c); }
+.t015-chbox { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: flex-start; padding: 64px 20px 24px; background: var(--t015-card); }
+.t015-chl { font: 700 24px/1.3 var(--font); color: var(--t015-c); }
+.t015-chn { margin-top: 4px; }
+.t015-chn b { font: 700 44px/1.2 var(--font); letter-spacing: -.02em; }
+.t015-chn small { font-size: 24px; line-height: 1.2; color: var(--t015-mute); }
+.t015-plot { position: relative; align-self: stretch; height: 250px; margin-top: 26px; padding: 0 2px 26px; display: flex; align-items: flex-end; gap: 14px; }
+.t015-plot i { border-radius: 6px; }
+.t015-grid { position: absolute; inset: 0 0 26px; background: repeating-linear-gradient(to bottom, var(--t015-line) 0 1px, transparent 1px 25%); border-bottom: 1px solid var(--t015-line); }
+.t015-days { position: absolute; left: 2px; right: 2px; bottom: 0; display: flex; gap: 14px; }
+.t015-days span { flex: 1; text-align: center; font-size: 12px; color: var(--t015-faint); }
+.t015-chnote { margin: 22px 0 0; color: var(--t015-mute); font-size: 15px; line-height: 1.6; }
+
+/* f · 菜单 */
+.t015-mhead { display: flex; align-items: center; justify-content: space-between; padding-right: 16px; }
+.t015-plus { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--t015-fill); color: var(--t015-tint); }
+.t015-plus svg { width: 20px; height: 20px; stroke-width: 2.4; }
+.t015-notes { display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
+.t015-note { padding: 12px 14px; border-radius: 12px; background: var(--t015-card); }
+.t015-note b { display: block; font: 600 16px/1.35 var(--font); }
+.t015-note small { font-size: 13px; color: var(--t015-mute); }
+/* 阴影放在外层的 drop-shadow 上：clip-path 会把元素自己的 box-shadow 一起裁掉 */
+.t015-menuw { position: absolute; z-index: 6; filter: drop-shadow(0 10px 24px rgb(0 0 0 / .18)) drop-shadow(0 0 .5px rgb(0 0 0 / .3)); }
+.t015-menu { position: relative; width: 236px; padding: 6px; border-radius: 14px; background: var(--t015-card); }
+.t015-mi { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; width: 100%; height: 42px; padding: 0 12px; border-radius: 9px; font-size: 16px; }
+.t015-mi:focus-visible { outline: none; }
+.t015-mi svg { width: 19px; height: 19px; stroke-width: 1.9; color: var(--t015-mute); }
+.t015-hl { position: absolute; left: 6px; right: 6px; top: 0; height: 42px; border-radius: 9px; background: var(--t015-fill); opacity: 0; pointer-events: none; }
+
+/* g · 标签栏 */
+.t015-tp { position: absolute; inset: 0; overflow-y: auto; padding: 18px 0 110px; scrollbar-width: none; }
+.t015-blocks { display: grid; gap: 12px; padding: 4px 16px; }
+.t015-blocks.two { grid-template-columns: 1fr 1fr; }
+.t015-blocks i { display: block; height: 120px; border-radius: 16px; background: var(--t015-art); }
+.t015-blocks.two i { height: 150px; }
+.t015-tabbar { position: absolute; left: 16px; right: 16px; bottom: 18px; z-index: 4; height: 62px; display: grid; grid-template-columns: repeat(4, 1fr); padding: 0 4px; border-radius: 31px; background: var(--t015-card); box-shadow: 0 8px 28px -10px rgb(0 0 0 / .3), 0 0 0 .5px var(--t015-line); }
+.t015-pill { position: absolute; inset: 5px 0; background: var(--t015-fill); clip-path: inset(var(--t015-pt) calc(100% - var(--t015-pr)) var(--t015-pt) var(--t015-pl) round 999px); }
+.t015-tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--t015-mute); transition: color .2s; }
+.t015-tab[aria-selected="true"] { color: var(--t015-tint); }
+.t015-tab svg { width: 24px; height: 24px; stroke-width: 1.9; }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="014-delete-effects.html">← 014</a><a href="016-toast-notification.html">016 →</a></span></nav>
+<section class="tip" id="t015">
+  <div class="tip-h"><span class="no">015</span><h2>连续性：点到的元素直接变成下一个状态</h2><a class="src" href="https://x.com/Kubai087/status/2120320609255043510" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">七个常见场景：行标题长成页面标题、卡片展开成正文、播放条展开成播放页、搜索框移到顶部、指标卡的小柱变成图表的柱、菜单从按钮里长出来、标签栏的胶囊先伸展再落位。切到「硬切」对比没有连续性时的样子；动画途中再点一次，会从当前位置接着走。</p>
+  <div class="stage">
+    <div class="ctrls">
+      <div class="seg" id="t015-scene" role="group" aria-label="场景" style="flex-wrap:wrap"><button type="button" data-v="nav" aria-pressed="true">导航</button><button type="button" data-v="card" aria-pressed="false">卡片</button><button type="button" data-v="player" aria-pressed="false">播放条</button><button type="button" data-v="search" aria-pressed="false">搜索</button><button type="button" data-v="chart" aria-pressed="false">图表</button><button type="button" data-v="menu" aria-pressed="false">菜单</button><button type="button" data-v="tabs" aria-pressed="false">标签栏</button></div>
+      <div class="seg" id="t015-cont" role="group" aria-label="过渡"><button type="button" data-v="1" aria-pressed="true">连续</button><button type="button" data-v="0" aria-pressed="false">硬切</button></div>
+      <div class="seg" id="t015-mode" role="group" aria-label="模式"><button type="button" data-v="light" aria-pressed="true">浅色</button><button type="button" data-v="dark" aria-pressed="false">深色</button></div>
+      <div class="seg" id="t015-speed" role="group" aria-label="速度"><button type="button" data-v="1" aria-pressed="true">1×</button><button type="button" data-v="0.25" aria-pressed="false">¼×</button></div>
+    </div>
+    <div class="t015-dev" id="t015-dev" data-mode="light">
+
+      <!-- a 导航 -->
+      <div class="t015-scene" id="t015-s-nav">
+        <div class="t015-pg" id="t015-nl"><div class="t015-scroll">
+          <h3 class="t015-large t015-m" id="t015-nl-title">资料库</h3>
+          <div class="t015-group" id="t015-rows"></div>
+        </div></div>
+        <div class="t015-pg t015-over" id="t015-nd" hidden>
+          <div class="t015-pgbg" id="t015-nd-bg"></div>
+          <div class="t015-scroll" id="t015-nd-scroll">
+            <div class="t015-hero t015-m" id="t015-nd-hero"></div>
+            <h3 class="t015-dtitle t015-m" id="t015-nd-title"><span></span></h3>
+            <div class="t015-text" id="t015-nd-body"></div>
+          </div>
+          <div class="t015-top"><div class="t015-topbg" id="t015-nd-bar"></div><button type="button" class="t015-back" id="t015-nd-back"><svg viewBox="0 0 24 24" id="t015-nd-chev" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span class="t015-m" id="t015-nd-label">资料库</span></button></div>
+        </div>
+      </div>
+
+      <!-- b 卡片 -->
+      <div class="t015-scene" id="t015-s-card" hidden>
+        <div class="t015-pg"><div class="t015-scroll">
+          <small class="t015-kick">11月10日 星期一</small>
+          <h3 class="t015-large">今日</h3>
+          <div class="t015-feed" id="t015-feed"></div>
+        </div></div>
+        <div class="t015-pg t015-over" id="t015-cd" hidden role="dialog" aria-modal="true" aria-labelledby="t015-cd-title">
+          <div class="t015-cdbox t015-m" id="t015-cd-box">
+            <div class="t015-scroll" id="t015-cd-scroll"><div class="t015-m" id="t015-cd-inner">
+              <span class="t015-img" id="t015-cd-img"></span>
+              <div class="t015-cdtext"><small id="t015-cd-kick"></small><h3 id="t015-cd-title"></h3></div>
+              <div class="t015-text" id="t015-cd-body"></div>
+            </div></div>
+            <button type="button" class="t015-x t015-on-img" id="t015-cd-x" aria-label="关闭"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- c 播放条 -->
+      <div class="t015-scene" id="t015-s-player" hidden>
+        <div class="t015-pg t015-plpage" id="t015-pl-page"><div class="t015-scroll">
+          <h3 class="t015-large">最近播放</h3>
+          <div class="t015-albums" id="t015-albums"></div>
+        </div></div>
+        <div class="t015-dim" id="t015-pl-dim"></div>
+        <div class="t015-mini" id="t015-mini">
+          <button type="button" class="t015-mopen" id="t015-mini-open" aria-label="展开播放器：午夜的海"><span class="t015-cover t015-m" id="t015-mini-cover"></span><span class="t015-mt"><b class="t015-m" id="t015-mini-title">午夜的海</b><small class="t015-m" id="t015-mini-artist">岸边乐队</small></span></button>
+          <button type="button" class="t015-play t015-m" id="t015-mini-play" aria-label="暂停"></button>
+          <button type="button" class="t015-ib" aria-label="下一首"><svg class="t015-m" id="t015-mini-next" viewBox="0 0 24 24"><path d="M5 5.5v13l9-6.5zM15 5.5v13l2.5-1.8V7.3zM18 5h2v14h-2z"/></svg></button>
+        </div>
+        <div class="t015-full" id="t015-full" hidden role="dialog" aria-label="正在播放">
+          <span class="t015-grab t015-f"></span>
+          <button type="button" class="t015-down t015-f" id="t015-full-down" aria-label="收起播放器"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+          <span class="t015-cover t015-fcover t015-m" id="t015-full-cover"></span>
+          <div class="t015-ft"><b class="t015-m" id="t015-full-title">午夜的海</b><small class="t015-m" id="t015-full-artist">岸边乐队</small></div>
+          <div class="t015-prog t015-f"><i></i></div>
+          <div class="t015-times t015-f"><span>1:12</span><span>-2:31</span></div>
+          <div class="t015-ctl">
+            <button type="button" class="t015-ib t015-f" aria-label="上一首"><svg viewBox="0 0 24 24"><path d="M19 5.5v13l-9-6.5zM9 5.5v13l-2.5-1.8V7.3zM4 5h2v14H4z"/></svg></button>
+            <button type="button" class="t015-play t015-m" id="t015-full-play" aria-label="暂停"></button>
+            <button type="button" class="t015-ib" aria-label="下一首"><svg class="t015-m" id="t015-full-next" viewBox="0 0 24 24"><path d="M5 5.5v13l9-6.5zM15 5.5v13l2.5-1.8V7.3zM18 5h2v14h-2z"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- d 搜索 -->
+      <div class="t015-scene" id="t015-s-search" hidden>
+        <div class="t015-pg"><div class="t015-scroll">
+          <h3 class="t015-large t015-stitle" id="t015-se-title">通讯录</h3>
+          <div class="t015-sbar" id="t015-se-bar">
+            <label class="t015-field" id="t015-se-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><input id="t015-se-input" placeholder="搜索（试试 chen 或 张）" aria-label="搜索通讯录" autocomplete="off"></label>
+            <button type="button" class="t015-cancel" id="t015-se-cancel" hidden>取消</button>
+          </div>
+          <div class="t015-people" id="t015-se-list" aria-live="polite"></div>
+          <p class="t015-none" id="t015-se-none" hidden>没有结果</p>
+        </div></div>
+      </div>
+
+      <!-- e 图表 -->
+      <div class="t015-scene" id="t015-s-chart" hidden>
+        <div class="t015-pg"><div class="t015-scroll">
+          <h3 class="t015-large">健康</h3>
+          <div class="t015-tiles" id="t015-tiles"></div>
+        </div></div>
+        <div class="t015-pg t015-over" id="t015-ch" hidden role="dialog" aria-modal="true" aria-labelledby="t015-ch-label">
+          <div class="t015-chbox" id="t015-ch-box">
+            <button type="button" class="t015-x" id="t015-ch-x" aria-label="关闭"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+            <h3 class="t015-chl t015-m" id="t015-ch-label" style="margin:0"></h3>
+            <div class="t015-chn"><b class="t015-m" id="t015-ch-num"></b><small class="t015-m" id="t015-ch-unit"></small></div>
+            <div class="t015-plot" id="t015-ch-plot"><span class="t015-grid t015-f"></span><span class="t015-days t015-f"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></span></div>
+            <p class="t015-chnote t015-f" id="t015-ch-note"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- f 菜单 -->
+      <div class="t015-scene" id="t015-s-menu" hidden>
+        <div class="t015-pg"><div class="t015-scroll">
+          <div class="t015-mhead"><h3 class="t015-large">备忘录</h3><button type="button" class="t015-plus" id="t015-plus" aria-label="新建" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+          <div class="t015-notes" id="t015-notes"></div>
+        </div></div>
+        <div class="t015-menuw" id="t015-menuw" hidden>
+          <div class="t015-menu t015-m" id="t015-menu" role="menu" aria-label="新建">
+            <span class="t015-hl" id="t015-hl"></span>
+            <button type="button" class="t015-mi" role="menuitem" data-a="note">新建备忘录<svg viewBox="0 0 24 24"><path d="M5 19h4L19 9l-4-4L5 15zM13 7l4 4"/></svg></button>
+            <button type="button" class="t015-mi" role="menuitem" data-a="list">新建清单<svg viewBox="0 0 24 24"><path d="M9 7h11M9 12h11M9 17h11M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></svg></button>
+            <button type="button" class="t015-mi" role="menuitem" data-a="scan">扫描文稿<svg viewBox="0 0 24 24"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M4 12h16"/></svg></button>
+            <button type="button" class="t015-mi" role="menuitem" data-a="folder">新建文件夹<svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- g 标签栏 -->
+      <div class="t015-scene" id="t015-s-tabs" hidden>
+        <div class="t015-pg" id="t015-panes"></div>
+        <nav class="t015-tabbar" id="t015-tabbar" role="tablist" aria-label="主导航"><span class="t015-pill" id="t015-pill"></span></nav>
+      </div>
+    </div>
+  </div>
+  <ul class="specs"><li>弹簧 ζ 0.9 · 静止起步 · linear() 采样</li><li>不支持时 cubic-bezier(.32, .72, 0, 1)</li><li>全屏 560ms · 菜单 420ms · 指示器 420ms</li><li>独有内容 50% 后淡入 / 前 30% 淡出</li><li>菜单项错开 25ms · 让位错开 30ms</li><li>拖动 1:1 · 缩到 0.82 · 松手看速度</li><li>减少动态效果：150ms 交叉淡化</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 015 连续性 ---------- */
+/* 核心是一个 go()：先读出元素当前画面上的值（可能在半路）、取消旧动画、量出它的布局盒子，再动画到目标。
+   打开时从「起点元素的矩形」反算出 transform / clip-path 作为起点；关闭和打断都从当前画面接着走。
+   外框长大用 clip-path（不压扁圆角和内容），文字、图片只做等比缩放。 */
+(() => {
+  const dev = $('#t015-dev');
+  // 曲线：从静止起步的弹簧（阻尼 0.9），用 CSS linear() 采样，时长内收到 <0.2%。
+  // cubic-bezier(.32,.72,0,1) 起步斜率 2.25，第一帧（16ms）就走掉约 6%（全屏转场约 30px），点下去像先跳一下；弹簧起步速度为 0，后面同样快、长尾收住。
+  const LINEAR_OK = CSS.supports('transition-timing-function', 'linear(0, 1)');
+  const springEase = (ms, zeta = .9) => {
+    if (!LINEAR_OK) return 'cubic-bezier(.32,.72,0,1)';
+    const s = ms / 1000, w = 6.5 / (zeta * s), wd = w * Math.sqrt(1 - zeta * zeta), n = 40, pts = [];
+    for (let i = 0; i < n; i++) { const t = i / n * s; pts.push((1 - Math.exp(-zeta * w * t) * (Math.cos(wd * t) + zeta * w / wd * Math.sin(wd * t))).toFixed(4)); }
+    return `linear(${pts.join(', ')}, 1)`;
+  };
+  const INOUT = 'cubic-bezier(.65,0,.35,1)';
+  const st = { cont: true, speed: 1 };
+  const moving = () => st.cont && !reduceMotion.matches;
+  const T = v => v / st.speed;
+  const px = v => `${(+v).toFixed(2)}px`;
+  const ID = 'translate(0px, 0px) scale(1)';
+  const fs = el => parseFloat(getComputedStyle(el).fontSize);
+  // 收尾：取消动画，并清掉 go() 留在内联样式上的不透明度
+  const stop = (...els) => els.forEach(el => { el.getAnimations().forEach(a => a.cancel()); el.style.opacity = ''; });
+  const rect = el => el.getBoundingClientRect();
+
+  // to / o.from 可以是对象，也可以是 lay => 对象（lay 是元素去掉 transform 后的布局盒子）
+  function go(el, to, dur, o = {}) {
+    const anims = el.getAnimations(), live = anims.some(a => a.playState === 'running');
+    const cs = getComputedStyle(el), cur = { transform: cs.transform, clipPath: cs.clipPath, opacity: cs.opacity };
+    anims.forEach(a => a.cancel());
+    const inline = el.style.transform; el.style.transform = 'none';
+    const lay = rect(el);
+    el.style.transform = inline;
+    if (o.reset) el.style.transform = el.style.clipPath = '';
+    const target = typeof to === 'function' ? to(lay) : to;
+    const start = (!live || o.force) && o.from ? (typeof o.from === 'function' ? o.from(lay) : o.from) : {};
+    const f0 = {};
+    for (const k in target) f0[k] = k in start ? start[k] : k === 'clipPath' && cur.clipPath === 'none' ? (o.rest || 'inset(0px round 0px)') : cur[k];
+    const a = el.animate([f0, target], { duration: T(dur), delay: T(o.delay || 0), easing: o.easing || springEase(dur), fill: 'both' });
+    // 播完后取消动画、交还给内联样式。不透明度总是写回终值：淡出往往比整段转场短，取消后若回到原值，
+    // 已经淡掉的东西（返回箭头、关闭按钮、菜单项）会在转场后半段重新冒出来
+    a.finished.then(() => { if (o.keep) Object.assign(el.style, target); else if ('opacity' in target) el.style.opacity = target.opacity; if (o.done) o.done(); a.cancel(); }).catch(() => {});
+    return a;
+  }
+  // 让一个 lay 大小的元素看起来正好是 from 矩形、圆角 r：等比缩放到能盖住 from，多出的部分用 clip-path 裁掉（ax/ay 决定裁哪边）
+  const grow = (from, r, ax = .5, ay = .5) => lay => {
+    const s = Math.max(from.width / lay.width, from.height / lay.height), cw = from.width / s, ch = from.height / s;
+    const l = (lay.width - cw) * ax, t = (lay.height - ch) * ay;
+    return { transform: `translate(${px(from.left - lay.left - l * s)}, ${px(from.top - lay.top - t * s)}) scale(${s.toFixed(4)})`,
+             clipPath: `inset(${px(t)} ${px(lay.width - cw - l)} ${px(lay.height - ch - t)} ${px(l)} round ${px(r / s)})` };
+  };
+  const open0 = r => ({ transform: ID, clipPath: `inset(0px 0px 0px 0px round ${r}px)` });
+  const at = (from, s, sy = s) => lay => ({ transform: `translate(${px(from.left - lay.left)}, ${px(from.top - lay.top)}) scale(${s.toFixed(4)}, ${sy.toFixed(4)})` });
+  // 文字：按字号比缩放，并补上两边行高不同造成的半行距差，字形本身对齐而不是行盒对齐
+  const lead = el => { const cs = getComputedStyle(el), f = parseFloat(cs.fontSize), lh = parseFloat(cs.lineHeight); return isNaN(lh) ? 0 : (lh - f) / 2; };
+  const txt = (from, a, b) => { const s = fs(a) / fs(b); return at(new DOMRect(from.left, from.top + lead(a) - lead(b) * s, from.width, from.height), s); };
+  const box = (from, lay) => at(from, from.width / lay.width, from.height / lay.height)(lay);
+  const clipFrom = (from, r) => lay => ({ clipPath: `inset(${px(from.top - lay.top)} ${px(lay.right - from.right)} ${px(lay.bottom - from.bottom)} ${px(from.left - lay.left)} round ${px(r)})` });
+  const fade = (el, to, dur, o = {}) => go(el, { opacity: String(to) }, dur, { easing: 'cubic-bezier(.2,.6,.3,1)', ...o, from: { opacity: String(1 - to) } });
+  // 减少动态效果：保留状态变化，只做 150ms 交叉淡化；「硬切」对照什么都不做
+  const crossIn = el => { if (st.cont) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150 }); };
+  const focus = el => el.focus({ preventScroll: true });
+
+  // 下拉关闭：拖动时 1:1 跟手并缩到 0.82；松手按「位移 + 速度 × 0.15s」去更近的一端
+  function dragDown(el, canStart, close, settle) {
+    let d = null;
+    el.addEventListener('pointerdown', e => { if (e.button === 0 && canStart(e)) d = { y: e.clientY, id: e.pointerId, pts: [[e.timeStamp, e.clientY]], on: false }; });
+    el.addEventListener('pointermove', e => {
+      if (!d || e.pointerId !== d.id) return;
+      const dy = e.clientY - d.y;
+      if (!d.on) { if (dy < -6) { d = null; return; } if (dy < 8) return; d.on = true; el.setPointerCapture(e.pointerId); stop(el); }
+      d.pts.push([e.timeStamp, e.clientY]); if (d.pts.length > 6) d.pts.shift();
+      const p = clamp(dy / 500), k = 1 - .18 * p, w = el.offsetWidth;
+      el.style.transform = `translate(${px(w * (1 - k) / 2)}, ${px(Math.max(0, dy))}) scale(${k.toFixed(4)})`;
+      el.style.clipPath = `inset(0px round ${px(Math.min(1, p * 5) * 28 / k)})`;
+    });
+    const end = () => {
+      if (!d) return; const was = d; d = null; if (!was.on) return;
+      const [t0, y0] = was.pts[0], [t1, y1] = was.pts[was.pts.length - 1], v = (y1 - y0) / Math.max(1, t1 - t0) * 1000;
+      (y1 - was.y + v * .15 > 160 ? close : settle)();
+    };
+    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  }
+
+  const ART = [
+    'linear-gradient(135deg, #a8c8ff, #eef4ff 55%, #b9c9e2)', 'linear-gradient(135deg, #ff9a62, #ffd29a 50%, #c2452d)',
+    'linear-gradient(135deg, #2f5d62, #8fb9a8 55%, #e0e7d3)', 'linear-gradient(135deg, #6db3f2, #f6e7b0 60%, #e8a87c)',
+    'linear-gradient(135deg, #1b1f3a, #53354a 50%, #ff6f61)', 'linear-gradient(135deg, #e6b17e, #f3d9b1 50%, #b5651d)',
+  ];
+  const LOREM = ['清晨的光从窗帘缝隙里斜着照进来，桌上的咖啡还冒着热气。我们决定不赶行程，先把这一天交给散步和发呆。',
+    '午后去了海边的旧码头，风很大，云走得很快。拍了很多张照片，回来翻看时，最喜欢的却是那张没对上焦的。',
+    '傍晚找到一家只有六个座位的小店，老板一边煮面一边和熟客聊天气。那碗面没什么特别，可就是记得很清楚。',
+    '回程的车上大家都睡着了。窗外的路灯一盏一盏往后退，像在替我们把这一天慢慢收好。',
+    '下次再来，大概还是会走同样的路，去同样的店。有些地方不是为了看新东西，而是为了确认它们还在。'];
+  const para = n => LOREM.slice(0, n).map(t => `<p>${t}</p>`).join('');
+
+  /* ---------- a · 行 → 详情页 ---------- */
+  {
+    const NAV = [['北海道的冬天', '摄影 · 32 张'], ['京都・秋', '摄影 · 18 张'], ['冰岛环岛', '游记 · 9 天'], ['大理的一周', '游记 · 7 天'], ['东京夜景', '摄影 · 24 张'], ['敦煌', '游记 · 4 天']];
+    const rows = $('#t015-rows'), list = $('#t015-nl'), lt = $('#t015-nl-title'), pg = $('#t015-nd'), bg = $('#t015-nd-bg'), sc = $('#t015-nd-scroll'),
+          hero = $('#t015-nd-hero'), title = $('#t015-nd-title'), body = $('#t015-nd-body'), back = $('#t015-nd-back'), label = $('#t015-nd-label'),
+          chev = $('#t015-nd-chev'), bar = $('#t015-nd-bar');
+    rows.innerHTML = NAV.map(([t, s], i) => `<button type="button" class="t015-row" data-i="${i}"><span class="t015-thumb t015-m" style="--t015-art:${ART[i]}"></span><span class="t015-rt"><b class="t015-m">${t}</b><small>${s}</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>`).join('');
+    body.innerHTML = para(5) + para(3);
+    let row = null;
+    const parts = r => [$('b', r), $('.t015-thumb', r)];
+    const hide = on => { if (row) for (const el of [...parts(row), lt]) el.style.visibility = on ? 'hidden' : ''; };
+    const D = 560, colors = () => ({ ink: getComputedStyle(lt).color, tint: getComputedStyle(back).color });
+    function open(r) {
+      if (row && row !== r) hide(false);
+      row = r; const i = +r.dataset.i, [b, th] = parts(r);
+      hero.style.setProperty('--t015-art', ART[i]); title.firstChild.textContent = NAV[i][0];
+      const rT = rect(b), rTh = rect(th), rL = rect(lt), opened = !pg.hidden;
+      pg.hidden = false; if (!opened) sc.scrollTop = 0; tuck(); focus(back);
+      if (!moving()) { crossIn(pg); return; }
+      hide(true);
+      const { ink, tint } = colors();
+      go(hero, open0(16), D, { from: grow(rTh, 10) });                                   // 缩略图 → 头图
+      go(title, { transform: ID }, D, { from: txt(rT, b, title) });              // 行标题 → 页面标题
+      go(label, { transform: ID, color: tint }, D, { from: lay => ({ ...txt(rL, lt, label)(lay), color: ink }) });   // 上一页标题 → 返回按钮
+      // 新页从右侧推入、旧页左移 28%：整页不做交叉淡化，只有返回箭头这种「只属于新页」的小件淡入
+      const W = pg.clientWidth;
+      go(bg, { transform: ID }, D, { from: { transform: `translate(${px(W)}, 0px) scale(1)` } });
+      go(body, { transform: ID }, D, { from: { transform: `translate(${px(W)}, 0px) scale(1)` } });
+      go(list, { transform: `translate(${px(-W * .28)}, 0px) scale(1)` }, D, { keep: true });
+      fade(chev, 1, D * .4, { delay: D * .4 });
+    }
+    function close() {
+      if (pg.hidden) return;
+      const r = row, [b, th] = parts(r);
+      if (!moving()) { done(); crossIn(list); return; }
+      // 目标取列表回到原位后的位置：列表此刻被推在左边（可能还在半路），减掉它的位移
+      const dx = new DOMMatrix(getComputedStyle(list).transform).m41, home = el => { const r = rect(el); return new DOMRect(r.left - dx, r.top, r.width, r.height); };
+      const { ink } = colors(), rT = home(b), rTh = home(th), rL = home(lt), W = pg.clientWidth;
+      go(hero, grow(rTh, 10), D, { rest: 'inset(0px round 16px)' });
+      go(title, txt(rT, b, title), D);
+      go(label, lay => ({ ...txt(rL, lt, label)(lay), color: ink }), D);
+      fade(chev, 0, D * .3); go(bar, { opacity: '0' }, D * .3);
+      go(list, { transform: ID }, D, { keep: true });
+      go(body, { transform: `translate(${px(W)}, 0px) scale(1)` }, D);
+      go(bg, { transform: `translate(${px(W)}, 0px) scale(1)` }, D, { done });
+    }
+    function done() {
+      pg.hidden = true; stop(hero, title, label, body, chev, bg, bar, list);
+      title.style.transform = list.style.transform = bar.style.opacity = '';
+      hide(false); focus(row); row = null;
+    }
+    // 滚动时大标题收进顶栏、在控件行居中（跟着滚动连续变化，不是交叉淡化）
+    const S1 = 17 / 30;
+    function tuck() {
+      const s = sc.scrollTop, T0 = title.offsetTop, h0 = title.offsetHeight, from = 64, p = clamp((from - (T0 - s)) / 48);
+      if (!bar.getAnimations().length) bar.style.opacity = p.toFixed(3);
+      if (title.getAnimations().length) return;
+      if (p <= 0) { title.style.transform = ''; return; }
+      const w0 = title.firstChild.offsetWidth, L0 = title.offsetLeft, k = 1 + (S1 - 1) * p;
+      const top = from + (26 - h0 * S1 / 2 - from) * p, left = L0 + ((pg.clientWidth - w0 * S1) / 2 - L0) * p;
+      title.style.transform = `translate(${px(left - L0)}, ${px(top - (T0 - s))}) scale(${k.toFixed(4)})`;
+    }
+    rows.addEventListener('click', e => { const r = e.target.closest('.t015-row'); if (r) open(r); });
+    back.addEventListener('click', close);
+    sc.addEventListener('scroll', tuck, { passive: true });
+    pg.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  }
+
+  /* ---------- b · 卡片 → 全屏 ---------- */
+  {
+    const CARDS = [['今日精选', '在雪国读完一本书', 0], ['旅行', '沿着海岸线开一整天', 3], ['摄影', '把夜景拍得更干净', 4]];
+    const feed = $('#t015-feed'), pg = $('#t015-cd'), bx = $('#t015-cd-box'), sc = $('#t015-cd-scroll'), inner = $('#t015-cd-inner'),
+          img = $('#t015-cd-img'), kick = $('#t015-cd-kick'), title = $('#t015-cd-title'), body = $('#t015-cd-body'), x = $('#t015-cd-x');
+    feed.innerHTML = CARDS.map(([k, t, a], i) => `<button type="button" class="t015-fcard" data-i="${i}"><span class="t015-img" style="--t015-art:${ART[a]}"></span><span class="t015-ftext"><small>${k}</small><b>${t}</b></span></button>`).join('');
+    body.innerHTML = para(5);
+    let card = null; const D = 600;
+    function open(c) {
+      card = c; const [k, t, a] = CARDS[+c.dataset.i];
+      img.style.setProperty('--t015-art', ART[a]); kick.textContent = k; title.textContent = t;
+      pg.hidden = false; sc.scrollTop = 0;
+      const r = rect(c); bx.style.setProperty('--t015-s', (r.width / bx.clientWidth).toFixed(4));
+      c.style.visibility = 'hidden'; focus(x);
+      if (!moving()) { crossIn(pg); return; }
+      go(bx, open0(0), D, { from: grow(r, 22, .5, 0) });          // 卡片本身长成全屏：只露出顶部那一块，正好是卡片
+      fade(body, 1, D * .45, { delay: D * .5 }); fade(x, 1, D * .4, { delay: D * .5 });
+    }
+    function close() {
+      if (!card || pg.hidden) return;
+      if (!moving()) { done(); return; }
+      const r = rect(card), s = sc.scrollTop;
+      if (s) { sc.scrollTop = 0; go(inner, { transform: ID }, D * .9, { from: { transform: `translate(0px, ${px(-s)}) scale(1)` }, force: true }); }   // 正文滚回顶部，跟着一起收
+      go(bx, grow(r, 22, .5, 0), D * .9, { reset: true, done });
+      fade(body, 0, D * .3); fade(x, 0, D * .3);
+    }
+    function done() { pg.hidden = true; stop(bx, body, x, inner); bx.style.transform = bx.style.clipPath = ''; card.style.visibility = ''; focus(card); card = null; }
+    feed.addEventListener('click', e => { const c = e.target.closest('.t015-fcard'); if (c) open(c); });
+    x.addEventListener('click', close);
+    pg.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    dragDown(bx, e => sc.scrollTop <= 0 && !e.target.closest('button') && moving(), close,
+      () => go(bx, open0(0), 380, { reset: true }));
+  }
+
+  /* ---------- c · 播放条 → 播放页 ---------- */
+  {
+    const page = $('#t015-pl-page'), dim = $('#t015-pl-dim'), mini = $('#t015-mini'), mOpen = $('#t015-mini-open'), mCover = $('#t015-mini-cover'),
+          mTitle = $('#t015-mini-title'), mPlay = $('#t015-mini-play'), full = $('#t015-full'), fCover = $('#t015-full-cover'),
+          fTitle = $('#t015-full-title'), fPlay = $('#t015-full-play'), down = $('#t015-full-down'), rest = $$('.t015-f', full),
+          mArtist = $('#t015-mini-artist'), fArtist = $('#t015-full-artist'), mNext = $('#t015-mini-next'), fNext = $('#t015-full-next');
+    const w = el => parseFloat(getComputedStyle(el).width);
+    $('#t015-albums').innerHTML = ['夏日终章', '慢车', '午夜的海', '北方', '雨季', '回声'].map((t, i) => `<div class="t015-album"><i style="--t015-art:${ART[i]}"></i><b>${t}</b><small>岸边乐队</small></div>`).join('');
+    let playing = true;
+    const icon = () => playing ? '<svg viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></svg>';
+    const syncPlay = () => { for (const b of [mPlay, fPlay]) { b.innerHTML = icon(); b.setAttribute('aria-label', playing ? '暂停' : '播放'); } };
+    syncPlay();
+    [mPlay, fPlay].forEach(b => b.addEventListener('click', () => { playing = !playing; syncPlay(); }));
+    const D = 600;
+    function show() {
+      full.hidden = false; focus(down);
+      const rBar = rect(mini), rc = rect(mCover), rt = rect(mTitle), rp = rect(mPlay), ra = rect(mArtist), rn = rect(mNext);
+      mini.style.visibility = 'hidden';
+      if (!moving()) { page.style.transform = 'scale(.94)'; dim.style.opacity = '1'; crossIn(full); return; }
+      go(full, open0(22), D, { from: clipFrom(rBar, 16) });                       // 条就是面板：从条的位置展开，全程不透明
+      go(fCover, open0(14), D, { from: grow(rc, 8) });                           // 封面、标题、播放键各归其位
+      go(fTitle, { transform: ID }, D, { from: txt(rt, mTitle, fTitle) });
+      go(fPlay, { transform: ID }, D, { from: at(rp, rp.width / fPlay.offsetWidth) });
+      go(fArtist, { transform: ID }, D, { from: txt(ra, mArtist, fArtist) });   // 歌手名、下一首也各归其位：条里没有东西凭空消失
+      go(fNext, { transform: ID }, D, { from: at(rn, rn.width / w(fNext)) });
+      rest.forEach(el => fade(el, 1, D * .4, { delay: D * .5 }));
+      go(page, { transform: 'scale(.94)' }, D, { keep: true });                   // 背后的页面后退一步
+      go(dim, { opacity: '1' }, D, { keep: true });
+    }
+    function hide() {
+      if (full.hidden) return;
+      if (!moving()) { done(); crossIn(mini); return; }
+      const rBar = rect(mini), rc = rect(mCover), rt = rect(mTitle), rp = rect(mPlay), ra = rect(mArtist), rn = rect(mNext);
+      go(fArtist, txt(ra, mArtist, fArtist), D * .9);
+      go(fNext, at(rn, rn.width / w(fNext)), D * .9);
+      go(full, lay => ({ ...clipFrom(rBar, 16)(lay), transform: ID }), D * .9, { reset: true, rest: 'inset(0px round 22px)', done });
+      go(fCover, grow(rc, 8), D * .9, { rest: 'inset(0px round 14px)' });
+      go(fTitle, txt(rt, mTitle, fTitle), D * .9);
+      go(fPlay, at(rp, rp.width / fPlay.offsetWidth), D * .9);
+      rest.forEach(el => fade(el, 0, D * .25));
+      go(page, { transform: 'scale(1)' }, D * .9, { keep: true });
+      go(dim, { opacity: '0' }, D * .9, { keep: true });
+    }
+    function done() { full.hidden = true; stop(full, fCover, fTitle, fPlay, fArtist, fNext, ...rest); full.style.transform = full.style.clipPath = page.style.transform = dim.style.opacity = ''; mini.style.visibility = ''; focus(mOpen); }
+    mOpen.addEventListener('click', show);
+    down.addEventListener('click', hide);
+    full.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+    // 拖动关闭时面板只跟手下移，用 clip-path 收起：这里沿用同一个 dragDown，松手后同一条曲线收回条里
+    dragDown(full, e => !e.target.closest('button') && moving(), hide, () => go(full, open0(22), 380, { reset: true }));
+  }
+
+  /* ---------- d · 搜索 ---------- */
+  {
+    const PEOPLE = [['安然', 'anran'], ['陈静', 'chenjing'], ['陈晓', 'chenxiao'], ['方舟', 'fangzhou'], ['韩梅', 'hanmei'], ['李娜', 'lina'], ['刘洋', 'liuyang'],
+                    ['王芳', 'wangfang'], ['吴昊', 'wuhao'], ['许诺', 'xunuo'], ['杨帆', 'yangfan'], ['张伟', 'zhangwei'], ['张晨', 'zhangchen'], ['赵磊', 'zhaolei'], ['周婷', 'zhouting']];
+    const COL = ['#ff8a5c', '#5e7bff', '#20b26c', '#c06cf0', '#ff5c8a', '#2aa3c2', '#d99a1e'];
+    const S = $('#t015-s-search'), title = $('#t015-se-title'), bar = $('#t015-se-bar'), field = $('#t015-se-field'), input = $('#t015-se-input'),
+          cancel = $('#t015-se-cancel'), list = $('#t015-se-list'), none = $('#t015-se-none');
+    list.innerHTML = PEOPLE.map(([n, p], i) => `<div class="t015-person" data-k="${n}${p}"><span class="t015-av" style="background:${COL[i % COL.length]}">${n[0]}</span><span>${n}</span></div>`).join('');
+    const rows = $$('.t015-person', list); let on = false;
+    // 一次布局变化：先记下每个元素当前画面上的位置，改 DOM，再从旧位置滑到新位置；不再匹配的原地淡出，新出现的在后半段淡入
+    function update(change, D = 420) {
+      const vis = rows.filter(el => !el.hidden && !el._out), before = new Map([bar, ...vis].map(el => [el, rect(el)]));
+      change();
+      const q = input.value.trim().toLowerCase(), leaving = [];
+      for (const el of rows) {
+        const hit = !q || el.dataset.k.includes(q);
+        if (hit) { if (el._out) { el._out = false; stop(el); el.style.cssText = ''; } el.hidden = false; }
+        else if (!el.hidden && !el._out) leaving.push(el);
+      }
+      none.hidden = rows.some(el => !el.hidden && !leaving.includes(el));
+      if (!moving()) { leaving.forEach(el => { el.hidden = true; }); return; }
+      const lr = rect(list);
+      for (const el of leaving) { const r = before.get(el); el._out = true; Object.assign(el.style, { position: 'absolute', left: '0', right: '0', top: px(r.top - lr.top), zIndex: '0' }); }
+      for (const el of leaving) fade(el, 0, D * .45, { done: () => { el.hidden = true; el._out = false; el.style.cssText = ''; } });
+      for (const el of [bar, ...rows]) {
+        if (el.hidden || el._out) continue;
+        const r = before.get(el);
+        if (r) go(el, { transform: ID }, D, { force: true, easing: INOUT, from: lay => ({ transform: `translate(0px, ${px(r.top - lay.top)}) scale(1)` }) });
+        else fade(el, 1, D * .4, { delay: D * .5 });
+      }
+    }
+    function enter() {
+      if (on) return; on = true;
+      if (!moving()) { S.classList.add('t015-searching'); cancel.hidden = false; title.style.visibility = 'hidden'; return; }
+      update(() => { S.classList.add('t015-searching'); cancel.hidden = false; }, 450);    // 标题离开文档流但留在原处，输入框上移到它的位置
+      go(title, { opacity: '0', transform: 'translate(0px, -14px) scale(1)' }, 260, { keep: true });
+      go(field, { clipPath: 'inset(0px 72px 0px 0px round 10px)' }, 450, { keep: true });
+      go(cancel, { opacity: '1', transform: ID }, 450, { from: { opacity: '0', transform: 'translate(48px, 0px) scale(1)' }, delay: 40 });
+    }
+    function exit() {
+      if (!on) return; on = false; input.value = ''; input.blur();
+      if (!moving()) { S.classList.remove('t015-searching'); cancel.hidden = true; title.style.visibility = ''; update(() => {}); return; }
+      update(() => S.classList.remove('t015-searching'), 450);
+      go(title, { opacity: '1', transform: ID }, 300, { delay: 150, done: () => { title.style.opacity = title.style.transform = ''; } });
+      go(field, { clipPath: 'inset(0px 0px 0px 0px round 10px)' }, 450, { done: () => { field.style.clipPath = ''; } });
+      go(cancel, { opacity: '0', transform: 'translate(48px, 0px) scale(1)' }, 260, { done: () => { cancel.hidden = true; cancel.style.opacity = ''; } });
+    }
+    input.addEventListener('focus', enter);
+    input.addEventListener('input', () => { enter(); update(() => {}); });   // 没拿到 focus 事件时（如程序聚焦），第一次输入也进入搜索态
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') exit(); });
+    cancel.addEventListener('click', exit);
+  }
+
+  /* ---------- e · 指标卡 → 图表 ---------- */
+  {
+    const TILES = [['步数', '8,432', '步', '#ff6b3d', [.45, .62, .38, .8, .55, .92, .7], '这周比上周多走了 12%，周六最多。'],
+                   ['睡眠', '7:12', '小时', '#5e7bff', [.7, .55, .8, .65, .9, .6, .75], '平均入睡时间 23:40，周四睡得最久。'],
+                   ['心率', '68', '次/分', '#ff3b5c', [.5, .62, .55, .7, .66, .58, .62], '静息心率稳定在 60–70 之间。'],
+                   ['站立', '10', '小时', '#20b26c', [.6, .8, .7, .9, .5, .75, .85], '七天里有五天达到了站立目标。']];
+    const tiles = $('#t015-tiles'), pg = $('#t015-ch'), bx = $('#t015-ch-box'), label = $('#t015-ch-label'), num = $('#t015-ch-num'), unit = $('#t015-ch-unit'),
+          plot = $('#t015-ch-plot'), note = $('#t015-ch-note'), x = $('#t015-ch-x'), rest = $$('.t015-f', pg);
+    tiles.innerHTML = TILES.map(([l, n, u, c, v], i) => `<button type="button" class="t015-tile" data-i="${i}" style="--t015-c:${c}"><span class="t015-tl">${l}</span><span class="t015-tn"><b>${n}</b><small>${u}</small></span><span class="t015-spark">${v.map(h => `<i style="height:${h * 100}%"></i>`).join('')}</span></button>`).join('');
+    plot.insertAdjacentHTML('beforeend', '<i class="t015-m"></i>'.repeat(7));
+    const bars = $$('i.t015-m', plot); let tile = null; const D = 560;
+    const src = t => ({ l: $('.t015-tl', t), n: $('.t015-tn b', t), u: $('.t015-tn small', t), bars: $$('.t015-spark i', t) });
+    function open(t) {
+      tile = t; const [l, n, u, c, v, info] = TILES[+t.dataset.i], s = src(t);
+      bx.style.setProperty('--t015-c', c); label.textContent = l; num.textContent = n; unit.textContent = u; note.textContent = info;
+      bars.forEach((b, i) => { b.style.height = `${v[i] * 100}%`; });
+      pg.hidden = false; focus(x);
+      const r = rect(t), rl = rect(s.l), rn = rect(s.n), ru = rect(s.u), rb = s.bars.map(rect);
+      t.style.visibility = 'hidden';
+      if (!moving()) { crossIn(pg); return; }
+      go(bx, open0(0), D, { from: clipFrom(r, 18) });                                     // 外框从卡片展开
+      go(label, { transform: ID }, D, { from: txt(rl, s.l, label) });             // 标签移成标题
+      go(num, { transform: ID }, D, { from: txt(rn, s.n, num) });                 // 数字放大，不重画
+      go(unit, { transform: ID }, D, { from: txt(ru, s.u, unit) });
+      bars.forEach((b, i) => go(b, { transform: ID }, D, { from: lay => box(rb[i], lay) }));   // 小柱就是图表的柱
+      rest.concat(x).forEach(el => fade(el, 1, D * .4, { delay: D * .5 }));
+    }
+    function close() {
+      if (!tile || pg.hidden) return;
+      if (!moving()) { done(); return; }
+      const s = src(tile), r = rect(tile), rl = rect(s.l), rn = rect(s.n), ru = rect(s.u), rb = s.bars.map(rect);
+      go(bx, clipFrom(r, 18), D * .9, { done });
+      go(label, txt(rl, s.l, label), D * .9);
+      go(num, txt(rn, s.n, num), D * .9);
+      go(unit, txt(ru, s.u, unit), D * .9);
+      bars.forEach((b, i) => go(b, lay => box(rb[i], lay), D * .9));
+      rest.concat(x).forEach(el => fade(el, 0, D * .3));
+    }
+    function done() { pg.hidden = true; stop(bx, label, num, unit, x, ...bars, ...rest); tile.style.visibility = ''; focus(tile); tile = null; }
+    tiles.addEventListener('click', e => { const t = e.target.closest('.t015-tile'); if (t) open(t); });
+    x.addEventListener('click', close);
+    pg.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  }
+
+  /* ---------- f · 按钮 → 菜单；新增项落入首位 ---------- */
+  {
+    const S = $('#t015-s-menu'), plus = $('#t015-plus'), wrap = $('#t015-menuw'), menu = $('#t015-menu'), hl = $('#t015-hl'), items = $$('.t015-mi', menu), notes = $('#t015-notes');
+    const note = (t, s) => { const d = document.createElement('div'); d.className = 't015-note'; d.innerHTML = `<b>${t}</b><small>${s}</small>`; return d; };
+    notes.append(...[['周末采购', '昨天 · 牛奶、鸡蛋、咖啡豆'], ['读书笔记', '星期六 · 《设计中的设计》第三章'], ['旅行清单', '11月2日 · 护照、转换插头'], ['会议纪要', '10月30日 · 首页改版评审'], ['灵感', '10月28日 · 卡片翻开的交互']].map(a => note(...a)));
+    let isOpen = false, n = 0;
+    function place() { const s = rect(S), b = rect(plus); wrap.style.top = px(b.bottom - s.top + 8); wrap.style.right = px(s.right - b.right); }
+    function open() {
+      isOpen = true; wrap.hidden = false; place(); plus.setAttribute('aria-expanded', 'true');
+      hl.style.opacity = '0'; focus(items[0]);
+      if (!moving()) { crossIn(menu); return; }
+      const b = rect(plus), D = 420;
+      go(menu, open0(14), D, { from: grow(b, b.height / 2, 1, 0) });           // 从按钮自己的右上角长出来
+      fade(wrap, 1, D * .25, { easing: 'linear' });                              // 同时淡入：第一帧不会有一块白盖住按钮
+      items.forEach((el, i) => fade(el, 1, 180, { delay: D * .45 + i * 25 }));   // 基本展开后依次淡入
+    }
+    function close(refocus = true) {
+      if (!isOpen) return; isOpen = false; plus.setAttribute('aria-expanded', 'false');
+      if (refocus) focus(plus);
+      if (!moving()) { wrap.hidden = true; return; }
+      const b = rect(plus);
+      items.forEach(el => fade(el, 0, 120));
+      go(wrap, { opacity: '0' }, 160, { delay: 160, easing: 'linear' });
+      go(menu, grow(b, b.height / 2, 1, 0), 320, { rest: 'inset(0px round 14px)', done: () => { wrap.hidden = true; stop(menu, wrap, ...items); } });
+    }
+    // 高亮是一个元素，在项之间滑动
+    function light(el) {
+      const y = `translate(0px, ${px(el.offsetTop)}) scale(1)`;
+      if (getComputedStyle(hl).opacity === '0') { stop(hl); hl.style.transform = y; fade(hl, 1, 120, { keep: true }); }
+      else go(hl, { transform: y, opacity: '1' }, 160, { easing: INOUT, keep: true });
+    }
+    function add(kind) {
+      const rows = $$('.t015-note', notes), before = new Map(rows.map(el => [el, rect(el)]));
+      const el = note(kind === 'list' ? `新清单 ${++n}` : `新备忘录 ${++n}`, '刚刚'); notes.prepend(el);
+      if (!moving()) return;
+      rows.forEach((r, i) => go(r, { transform: ID }, 380, { force: true, easing: INOUT, delay: i * 30, from: lay => ({ transform: `translate(0px, ${px(before.get(r).top - lay.top)}) scale(1)` }) }));
+      go(el, { opacity: '1', transform: ID }, 380, { from: { opacity: '0', transform: 'translate(0px, -8px) scale(.97)' }, delay: 120 });
+    }
+    plus.addEventListener('click', () => (isOpen ? close() : open()));
+    items.forEach((el, i) => {
+      el.addEventListener('pointerenter', () => light(el));
+      el.addEventListener('focus', () => light(el));
+      el.addEventListener('click', () => { close(); if (el.dataset.a === 'note' || el.dataset.a === 'list') add(el.dataset.a); });
+      el.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); focus(items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]); }
+        if (e.key === 'Escape') close();
+      });
+    });
+    menu.addEventListener('pointerleave', () => { if (document.activeElement?.closest?.('#t015-menu') == null) fade(hl, 0, 120, { keep: true }); });
+    document.addEventListener('pointerdown', e => { if (isOpen && !wrap.contains(e.target) && !plus.contains(e.target)) close(false); });
+  }
+
+  /* ---------- g · 标签栏：胶囊先伸展再落位 ---------- */
+  {
+    const TABS = [['首页', 'M4 11l8-7 8 7v9h-5v-6H9v6H4z'], ['发现', 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm3.5 5.5l-2 5-5 2 2-5z'], ['收藏', 'M12 4l2.5 5 5.5.8-4 3.9.9 5.5L12 16.6 7.1 19.2l.9-5.5-4-3.9 5.5-.8z'], ['我的', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0']];
+    const PANES = [['首页', '', [1, 3, 5]], ['发现', 'two', [0, 2, 4, 1]], ['收藏', '', [4, 0]], ['我的', 'two', [3, 5]]];
+    const bar = $('#t015-tabbar'), pill = $('#t015-pill'), panes = $('#t015-panes');
+    bar.insertAdjacentHTML('beforeend', TABS.map(([l, d], i) => `<button type="button" class="t015-tab" role="tab" aria-selected="${i === 0}"><svg viewBox="0 0 24 24"><path d="${d}"/></svg>${l}</button>`).join(''));
+    const tabs = $$('.t015-tab', bar); let cur = 0, pane = null;
+    const paneEl = i => { const [t, c, a] = PANES[i], d = document.createElement('div'); d.className = 't015-tp'; d.setAttribute('role', 'tabpanel'); d.innerHTML = `<h3 class="t015-large">${t}</h3><div class="t015-blocks ${c}">${a.map(k => `<i style="--t015-art:${ART[k]}"></i>`).join('')}</div>`; return d; };
+    const edges = i => { const b = rect(bar), t = rect(tabs[i]); return [t.left - b.left + 4, t.right - b.left - 4]; };
+    const getL = k => parseFloat(getComputedStyle(pill).getPropertyValue(k));
+    function setPill(i) { const [l, r] = edges(i); pill.style.setProperty('--t015-pl', px(l)); pill.style.setProperty('--t015-pr', px(r)); }
+    function select(i) {
+      if (i === cur) return;
+      const old = cur, dir = Math.sign(i - old);
+      let l0 = getL('--t015-pl'), r0 = getL('--t015-pr');   // 从当前画面（可能在半路）接着走
+      if (!(r0 > l0)) [l0, r0] = edges(old);                // 还没量过（场景刚显示、尚未渲染）：从旧标签的位置起步
+      cur = i; tabs.forEach((t, j) => t.setAttribute('aria-selected', String(j === i)));
+      stop(pill); setPill(i);
+      const prev = pane; pane = paneEl(i); panes.append(pane);
+      if (!moving()) { prev.remove(); return; }
+      const [l1, r1] = edges(i), D = 420, LAG = 90;
+      // 前沿先走、后沿晚 90ms 跟上：途中拉长；最长时上下各压 7.5%（共 15%）
+      const lead = { duration: T(D - LAG), easing: springEase(D - LAG), fill: 'both' }, trail = { duration: T(D - LAG), delay: T(LAG), easing: springEase(D - LAG), fill: 'both' };
+      pill.animate({ '--t015-pr': [px(r0), px(r1)] }, dir > 0 ? lead : trail);
+      pill.animate({ '--t015-pl': [px(l0), px(l1)] }, dir > 0 ? trail : lead);
+      const h = pill.offsetHeight, sq = h * .075 * Math.min(1, Math.abs(l1 - l0) / (2 * (r1 - l1)));
+      pill.animate({ '--t015-pt': ['0px', px(sq), '0px'], offset: [0, .45, 1] }, { duration: T(D), easing: 'ease-in-out' });
+      pill.getAnimations().forEach(a => a.finished.then(() => a.cancel()).catch(() => {}));   // 终值已写在内联变量上，播完就释放
+      // 新内容从被选标签那一侧进来
+      go(pane, { opacity: '1', transform: ID }, D, { from: { opacity: '0', transform: `translate(${dir * 36}px, 0px) scale(1)` } });
+      go(prev, { opacity: '0', transform: `translate(${-dir * 24}px, 0px) scale(1)` }, D * .5, { done: () => prev.remove() });
+    }
+    tabs.forEach((t, i) => t.addEventListener('click', () => select(i)));
+    bar.addEventListener('keydown', e => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const i = (cur + (e.key === 'ArrowRight' ? 1 : 3)) % 4; select(i); focus(tabs[i]); } });
+    pane = paneEl(0); panes.append(pane);
+    new ResizeObserver(() => { if (!pill.getAnimations().length) setPill(cur); }).observe(bar);
+    dev.addEventListener('t015-scene', () => { if (bar.offsetWidth && !pill.getAnimations().length) setPill(cur); });
+  }
+
+  /* ---------- 控件 ---------- */
+  const scenes = $$('.t015-scene', dev);
+  seg($('#t015-scene'), v => { scenes.forEach(s => { s.hidden = s.id !== `t015-s-${v}`; }); dev.dispatchEvent(new Event('t015-scene')); });
+  seg($('#t015-cont'), v => { st.cont = v === '1'; });
+  seg($('#t015-speed'), v => { st.speed = +v; });
+  const setMode = dark => { dev.dataset.mode = dark ? 'dark' : 'light'; $$('#t015-mode button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.v === 'dark') === dark))); };
+  seg($('#t015-mode'), v => setMode(v === 'dark'));
+  setMode(isDarkTheme()); onThemeChange(() => setMode(isDarkTheme()));
+})();
+</script>
+</body>
+</html>

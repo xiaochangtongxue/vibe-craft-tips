@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>016 · Toast 和 Notification 怎么选</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 016 Toast 和 Notification ---------- */
+/* 一个工作台窗口：Toast 在顶栏下居中，通知在右上角堆叠；动效都用 WAAPI，系统「减少动态效果」把 CSS transition 压到 0 时淡入淡出照样在 */
+.t016-app {
+  --t016-bg: #f6f7f9; --t016-surf: #ffffff; --t016-ink: #151a22; --t016-mute: #68707d; --t016-faint: #a0a6b0;
+  --t016-line: rgba(17,24,39,.08); --t016-fill: rgba(17,24,39,.045); --t016-track: rgba(17,24,39,.1);
+  --t016-accent: #2f62e9; --t016-accent-soft: rgba(47,98,233,.11); --t016-danger: #d14343; --t016-danger-soft: rgba(209,67,67,.1);
+  --t016-pri-bg: #151a22; --t016-pri-ink: #ffffff;
+  /* Toast 的表面、描边、阴影照 Prompt */
+  --t016-t-top: #ffffff; --t016-t-bot: #f7f9fc; --t016-t-border: rgba(214,219,227,.95);
+  --t016-t-shadow: 0 16px 36px rgba(17,24,39,.08), 0 3px 10px rgba(17,24,39,.05);
+  --t016-sheen: rgba(255,255,255,.95); --t016-sheen-edge: rgba(47,98,233,.09);
+  --t016-n-surf: #ffffff; --t016-n-border: rgba(17,24,39,.08);
+  --t016-n-deep: 0 18px 40px rgba(17,24,39,.14), 0 4px 12px rgba(17,24,39,.06);
+  --t016-n-light: 0 1px 3px rgba(17,24,39,.06);
+  position: relative; height: clamp(420px, calc(100vh - 150px), 540px); border-radius: 14px; overflow: hidden;
+  background: var(--t016-bg); color: var(--t016-ink); font: 14px/20px var(--font);
+  box-shadow: 0 0 0 1px var(--line), 0 10px 30px rgba(15,23,42,.08);
+}
+.t016-app[data-mode="dark"] {
+  --t016-bg: #16171b; --t016-surf: #1d1f24; --t016-ink: #e9eaee; --t016-mute: #9aa0aa; --t016-faint: #6b717c;
+  --t016-line: rgba(255,255,255,.07); --t016-fill: rgba(255,255,255,.06); --t016-track: rgba(255,255,255,.13);
+  --t016-accent: #7d9bff; --t016-accent-soft: rgba(125,155,255,.16); --t016-danger: #f07171; --t016-danger-soft: rgba(240,113,113,.14);
+  --t016-pri-bg: #e9eaee; --t016-pri-ink: #16171b;
+  --t016-t-top: #2a2c33; --t016-t-bot: #24262c; --t016-t-border: rgba(255,255,255,.09);
+  --t016-t-shadow: 0 16px 36px rgba(0,0,0,.4), 0 3px 10px rgba(0,0,0,.25);
+  --t016-sheen: rgba(255,255,255,.07); --t016-sheen-edge: rgba(125,155,255,.05);
+  --t016-n-surf: #24262c; --t016-n-border: rgba(255,255,255,.08);
+  --t016-n-deep: 0 18px 40px rgba(0,0,0,.45), 0 4px 12px rgba(0,0,0,.25);
+  --t016-n-light: 0 1px 3px rgba(0,0,0,.3);
+  color-scheme: dark;
+}
+.t016-app button { cursor: pointer; }
+.t016-app :focus-visible { outline: 2px solid var(--t016-accent); outline-offset: 2px; }
+
+/* 产品本身 */
+.t016-top { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--t016-line); background: var(--t016-surf); }
+.t016-brand { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.t016-mark { width: 22px; height: 22px; border-radius: 7px; background: linear-gradient(135deg, #5b7cfa, #2f62e9); }
+.t016-search { margin-left: 18px; flex: 0 1 280px; height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 12px; border-radius: 10px; background: var(--t016-fill); color: var(--t016-faint); font-size: 13px; }
+.t016-search kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 6px; background: var(--t016-surf); color: var(--t016-mute); }
+.t016-sp { flex: 1; }
+.t016-btn { height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--t016-line); background: var(--t016-surf); color: var(--t016-ink); font: 500 13px/1 var(--font); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.t016-btn:hover { background: var(--t016-fill); }
+.t016-btn.is-pri { background: var(--t016-pri-bg); color: var(--t016-pri-ink); border-color: transparent; }
+.t016-btn[aria-disabled="true"] { opacity: .5; cursor: default; }
+.t016-btn svg { width: 15px; height: 15px; }
+.t016-bell { position: relative; width: 32px; height: 32px; border: 0; border-radius: 10px; background: transparent; color: var(--t016-mute); display: grid; place-items: center; }
+.t016-bell:hover, .t016-bell[aria-expanded="true"] { background: var(--t016-fill); color: var(--t016-ink); }
+.t016-bell svg { width: 18px; height: 18px; }
+.t016-badge { position: absolute; top: 2px; right: 1px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #e5484d; color: #fff; font: 600 10px/16px var(--mono); text-align: center; box-shadow: 0 0 0 2px var(--t016-surf); }
+.t016-me { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 600 11px var(--font); color: #7a4b13; background: #f4d9b0; }
+.t016-body { height: calc(100% - 52px); padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.t016-hello { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.t016-hello small { color: var(--t016-mute); font-size: 12px; }
+.t016-hello h3 { margin: 0; font: 650 22px/28px var(--font); letter-spacing: -.01em; }
+.t016-hello .t016-sp { min-width: 8px; }
+.t016-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.45fr 1fr; gap: 14px; }
+.t016-panel { min-height: 0; display: flex; flex-direction: column; background: var(--t016-surf); border-radius: 14px; box-shadow: 0 0 0 1px var(--t016-line); }
+.t016-panel h4 { margin: 0; padding: 12px 14px 8px; font: 600 13px/20px var(--font); }
+.t016-panel ul { list-style: none; margin: 0; padding: 0 6px 6px; overflow: auto; }
+.t016-row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; border-radius: 10px; overflow: hidden; }
+.t016-row:hover { background: var(--t016-fill); }
+.t016-row.is-flash { background: var(--t016-accent-soft); transition: background .6s; }
+.t016-row > b { flex: 1; min-width: 0; font-weight: 500; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t016-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.t016-who { width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 600 10px var(--font); color: #fff; }
+.t016-pill { flex: none; font-size: 12px; line-height: 20px; padding: 0 8px; border-radius: 6px; }
+.t016-ib { width: 28px; height: 28px; flex: none; border: 0; border-radius: 8px; background: transparent; color: var(--t016-faint); display: grid; place-items: center; }
+.t016-ib:hover { background: var(--t016-fill); color: var(--t016-ink); }
+.t016-ib svg { width: 16px; height: 16px; }
+.t016-ext { width: 30px; height: 30px; flex: none; border-radius: 8px; display: grid; place-items: center; font: 600 9px var(--mono); color: #fff; }
+.t016-fmeta { flex: none; font-size: 12px; color: var(--t016-mute); display: flex; align-items: center; gap: 8px; }
+.t016-fmeta .is-err { color: var(--t016-danger); font-weight: 500; }
+.t016-bar { width: 72px; height: 4px; border-radius: 2px; background: var(--t016-track); overflow: hidden; }
+.t016-bar i { display: block; height: 100%; width: 0; background: var(--t016-accent); border-radius: inherit; }
+.t016-retry { height: 26px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--t016-line); background: var(--t016-surf); color: var(--t016-ink); font: 500 12px/1 var(--font); }
+.t016-empty { padding: 18px 8px; color: var(--t016-mute); font-size: 13px; }
+
+/* Toast：顶部居中，一次一条。外形 40 高、圆角 16；有 1px 描边，所以左右内边距是 7 / 5，图标和按钮的外沿才是 8 / 6 */
+.t016-slot { position: absolute; top: 64px; left: 12px; right: 12px; z-index: 30; display: flex; justify-content: center; pointer-events: none; }
+.t016-toast {
+  pointer-events: auto; position: relative; flex: none; display: inline-flex; align-items: center; height: 40px; max-width: 100%;
+  padding: 0 13px 0 7px; border-radius: 16px; border: 1px solid var(--t016-t-border);
+  background: linear-gradient(var(--t016-t-top), var(--t016-t-bot)); box-shadow: var(--t016-t-shadow);
+  overflow: hidden; white-space: nowrap;
+}
+.t016-toast.has-btn { padding-right: 5px; }
+.t016-sheen { position: absolute; inset: 0; pointer-events: none; }
+.t016-sheen i { position: absolute; top: 0; bottom: 0; left: 0; width: 60%; transform: translateX(-110%);
+  background: linear-gradient(100deg, transparent 0, var(--t016-sheen-edge) 30%, var(--t016-sheen) 50%, var(--t016-sheen-edge) 70%, transparent 100%); }
+.t016-ico { position: relative; z-index: 1; flex: none; width: 24px; height: 24px; }
+.t016-i { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 8px; color: var(--t016-accent); }
+.t016-i.is-done { background: var(--t016-accent-soft); }
+.t016-i.is-error { background: var(--t016-danger-soft); color: var(--t016-danger); }
+.t016-i.is-spin svg { animation: t016-spin .9s linear infinite; }
+.t016-i.is-count b { position: absolute; inset: 0; display: grid; place-items: center; font: 600 10px/1 var(--mono); color: var(--t016-ink); }
+@keyframes t016-spin { to { transform: rotate(360deg); } }
+.t016-line { position: relative; z-index: 1; display: flex; align-items: center; min-width: 0; margin-left: 8px; }
+.t016-toast.is-morph .t016-line, .t016-line.is-ghost { flex: none; }
+.t016-line.is-ghost { position: absolute; margin: 0; }
+.t016-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 500 14px/20px var(--font); }
+.t016-act { flex: none; height: 28px; margin-left: 10px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--t016-accent); font: 600 14px/20px var(--font); }
+.t016-act:hover { background: var(--t016-accent-soft); }
+.t016-x { flex: none; width: 28px; height: 28px; margin-left: 6px; border: 0; border-radius: 10px; background: transparent; color: var(--t016-faint); display: grid; place-items: center; }
+.t016-act + .t016-x { margin-left: 0; }
+.t016-x:hover { background: var(--t016-fill); color: var(--t016-ink); }
+.t016-x svg { width: 14px; height: 14px; }
+
+/* 通知：右上角 344 宽；外层管 transform 和关闭按钮，盒子管高度和圆角，内容管透明度 */
+/* 区域四周多留 8 / 4：展开放不下时区域滚动，左上角的关闭按钮和阴影不被裁掉；卡片本身仍在顶栏下 12、距右 12、宽 344 */
+.t016-ns { position: absolute; top: 56px; right: 8px; z-index: 25; width: 356px; max-width: calc(100% - 16px); max-height: calc(100% - 64px); }
+.t016-ns.is-open { overflow-y: auto; }
+.t016-n { position: absolute; top: 8px; left: 8px; right: 4px; transform-origin: 50% 100%; touch-action: pan-y; }
+.t016-n-box { height: 0; border-radius: 24px; overflow: hidden; background: var(--t016-n-surf); box-shadow: 0 0 0 1px var(--t016-n-border), var(--t016-n-light); transition: box-shadow .25s; }
+.t016-ns:not(.is-open) .t016-n.is-front .t016-n-box { box-shadow: 0 0 0 1px var(--t016-n-border), var(--t016-n-deep); }
+.t016-n-in { padding: 12px; display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 10px; }
+.t016-pic { grid-row: span 3; width: 32px; height: 32px; border-radius: 12px; display: grid; place-items: center; font: 600 11px var(--font); color: #fff; }
+.t016-pic svg { width: 17px; height: 17px; }
+.t016-n-head { display: flex; align-items: baseline; gap: 8px; }
+.t016-n-head b { min-width: 0; font: 600 14px/20px var(--font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t016-n-head time { margin-left: auto; flex: none; font-size: 12px; color: var(--t016-faint); }
+.t016-n-text { margin: 0; font-size: 13px; line-height: 20px; color: var(--t016-mute); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.t016-n-acts { grid-column: 2; display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.t016-n-btn { height: 32px; padding: 0 14px; border: 0; border-radius: 12px; background: var(--t016-fill); color: var(--t016-ink); font: 500 13px/1 var(--font); }
+.t016-n-btn:hover { filter: brightness(.96); }
+.t016-n-btn.is-pri { background: var(--t016-pri-bg); color: var(--t016-pri-ink); }
+.t016-n-x { position: absolute; z-index: 2; top: -8px; left: -8px; width: 24px; height: 24px; border: 0; border-radius: 10px; display: grid; place-items: center;
+  background: var(--t016-n-surf); color: var(--t016-mute); box-shadow: 0 0 0 1px var(--t016-n-border), 0 2px 6px rgba(17,24,39,.12);
+  opacity: 0; scale: .8; pointer-events: none; transition: opacity .15s, scale .15s; }
+.t016-n-x svg { width: 12px; height: 12px; }
+.t016-n.is-hover .t016-n-x, .t016-n:focus-within .t016-n-x { opacity: 1; scale: 1; pointer-events: auto; }
+.t016-clear { position: absolute; top: 8px; right: 4px; height: 28px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--t016-n-surf); color: var(--t016-mute);
+  box-shadow: 0 0 0 1px var(--t016-n-border); font: 500 12px/1 var(--font); opacity: 0; pointer-events: none; transition: opacity .2s; }
+.t016-ns.is-open .t016-clear.is-on { opacity: 1; pointer-events: auto; }
+
+/* 铃铛后面的列表 */
+.t016-inbox { position: absolute; top: 56px; right: 52px; z-index: 40; width: 300px; max-width: calc(100% - 24px); max-height: calc(100% - 68px); overflow: auto; padding: 6px;
+  border-radius: 16px; background: var(--t016-n-surf); box-shadow: 0 0 0 1px var(--t016-n-border), var(--t016-n-deep); }
+.t016-inbox h5 { margin: 0; padding: 6px 8px 4px; font: 600 12px/20px var(--font); color: var(--t016-mute); }
+.t016-inbox ul { list-style: none; margin: 0; padding: 0; }
+.t016-ib-item { width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px 10px; padding: 8px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; font: inherit; }
+.t016-ib-item:hover { background: var(--t016-fill); }
+.t016-ib-item .t016-pic { width: 28px; height: 28px; border-radius: 10px; grid-row: span 2; }
+.t016-ib-item b { font: 600 13px/18px var(--font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t016-ib-item span { font-size: 12px; line-height: 18px; color: var(--t016-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t016-ib-item .is-keep { color: var(--t016-danger); }
+
+.t016-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.t016-stage { display: flex; flex-direction: column; gap: 16px; }
+.t016-rules { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.t016-rules li { padding: 10px 12px; border-radius: 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); font-size: 13px; line-height: 1.5; color: var(--muted); }
+.t016-rules b { display: block; color: var(--fg); font-weight: 600; }
+
+@media (max-width: 720px) {
+  .t016-search, .t016-who, .t016-pill, .t016-brand-t { display: none; }
+  .t016-cols { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; overflow: auto; }
+  .t016-rules { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .t016-body { padding: 14px; }
+}
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="015-continuity.html">← 015</a><a href="017-loading-states.html">017 →</a></span></nav>
+<section class="tip" id="t016">
+  <div class="tip-h"><span class="no">016</span><h2>Toast 和 Notification 怎么选</h2><a class="src" href="https://x.com/Kubai087/status/2120682993563922586" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">Toast 回应你刚做的事，自己消失：分享是状态，归档带撤销和倒计时，上传先转圈再原地变成结果。通知是别人或系统发来的，堆在右上角，悬停展开，留到你处理；铃铛和页面标题记着还有几条。上传切到「失败」看失败怎么留在那一项上。</p>
+  <div class="stage t016-stage">
+    <div class="ctrls">
+      <button class="o-btn pri" type="button" id="t016-push">来一条通知</button>
+      <div class="seg" id="t016-fail" role="group" aria-label="下一次上传"><button type="button" data-v="ok" aria-pressed="true">上传成功</button><button type="button" data-v="fail" aria-pressed="false">上传失败</button></div>
+      <div class="seg" id="t016-mode" role="group" aria-label="模式"><button type="button" data-v="light" aria-pressed="true">浅色</button><button type="button" data-v="dark" aria-pressed="false">深色</button></div>
+      <div class="seg" id="t016-motion" role="group" aria-label="动效"><button type="button" data-v="full" aria-pressed="true">完整动效</button><button type="button" data-v="reduce" aria-pressed="false">减少动态效果</button></div>
+      <div class="seg" id="t016-speed" role="group" aria-label="速度"><button type="button" data-v="1" aria-pressed="true">1×</button><button type="button" data-v="4" aria-pressed="false">¼×</button></div>
+    </div>
+    <div class="t016-app" id="t016-app" data-mode="light">
+      <header class="t016-top">
+        <span class="t016-brand"><span class="t016-mark"></span><span class="t016-brand-t">工作台</span></span>
+        <span class="t016-search">搜索或跳转…<kbd>⌘K</kbd></span>
+        <span class="t016-sp"></span>
+        <button class="t016-btn is-pri" type="button" id="t016-new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新建任务</button>
+        <button class="t016-bell" type="button" id="t016-bell" aria-expanded="false" aria-controls="t016-inbox" aria-label="通知"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><b class="t016-badge" id="t016-badge" hidden></b></button>
+        <span class="t016-me" aria-hidden="true">ML</span>
+      </header>
+      <div class="t016-body">
+        <div class="t016-hello">
+          <div><small>11 月 14 日 · 周六</small><h3>下午好，Mira</h3></div>
+          <span class="t016-sp"></span>
+          <button class="t016-btn" type="button" id="t016-share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg>分享</button>
+          <button class="t016-btn" type="button" id="t016-upload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>上传文件</button>
+        </div>
+        <div class="t016-cols">
+          <section class="t016-panel" aria-label="本周任务"><h4>本周任务</h4><ul id="t016-tasks"></ul></section>
+          <section class="t016-panel" aria-label="文件"><h4>文件</h4><ul id="t016-files"></ul></section>
+        </div>
+      </div>
+      <div class="t016-slot" id="t016-slot" role="status" aria-live="polite"></div>
+      <div class="t016-ns" id="t016-ns" role="region" aria-label="通知"><button class="t016-clear" type="button" id="t016-clear">全部清除</button></div>
+      <div class="t016-inbox" id="t016-inbox" hidden><h5>待处理</h5><ul id="t016-inbox-list"></ul></div>
+      <div class="t016-sr" id="t016-say" aria-live="assertive"></div>
+    </div>
+  </div>
+  <ul class="t016-rules">
+    <li><b>状态 Toast</b>你刚做的事，确认一下就好</li>
+    <li><b>操作 Toast</b>已经做了，可能还想撤销</li>
+    <li><b>进度 Toast</b>要等一会儿，原地变成结果</li>
+    <li><b>通知</b>别人或系统发来，错过了要紧</li>
+    <li><b>都不是</b>要修的留在原处，不可撤销的先确认</li>
+  </ul>
+  <ul class="specs"><li>Toast 40 高 · 圆角 16 · 图标 24/8 · 按钮 28/10</li><li>进场 500ms (.25,.1,.25,1) · ↓10 · 96% · 模糊 8</li><li>离场 220ms ease-in · ↑6 · 模糊 6</li><li>扫光 900ms ease-out · 只在完成时</li><li>原地变化 180 / 100–400 / 变宽 380ms</li><li>状态 3–5s · 撤销 6s · 进度完成后 3s · 悬停暂停</li><li>通知 344 宽 · 圆角 24 · 内边距 12</li><li>堆叠露 12 · 95% / 90% · 最多 3 张</li><li>新来 ↓56 · 560ms (.32,.72,0,1)</li><li>展开间距 8 · 380ms · 移除 →48 260ms · 补位 400ms</li><li>减少动态效果：150ms 淡入淡出</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 016 Toast 和 Notification ---------- */
+(() => {
+const app = $('#t016-app');
+const EASE = 'cubic-bezier(.25,.1,.25,1)', SNAP = 'cubic-bezier(.32,.72,0,1)';
+let K = 1, rmForced = false, failNext = false;
+const RM = () => rmForced || reduceMotion.matches;
+const T = ms => ms * K;
+const play = (el, kf, o) => el.animate(kf, { ...o, duration: T(o.duration), delay: T(o.delay || 0) });
+const X_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+/* ===== 产品：任务和文件 ===== */
+const PEOPLE = { MC: '#c0679a', JL: '#3d8bd9', IM: '#3a9d6f', TA: '#b07a2c', ML: '#8a6be0' };
+const ST = { 进行中: '#2f62e9', 评审中: '#c98613', 已完成: '#2f9e5f', 阻塞: '#d14343' };
+const tasks = $('#t016-tasks'), files = $('#t016-files');
+const ARCHIVE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="4.5" rx="1.2"/><path d="M5.5 9v9.5a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5V9M10 13h4"/></svg>';
+function taskRow(t, who, st) {
+  const li = h('li', 't016-row');
+  li.innerHTML = `<span class="t016-dot" style="background:${ST[st]}"></span><b>${esc(t)}</b><span class="t016-who" style="background:${PEOPLE[who]}">${who}</span><span class="t016-pill" style="color:${ST[st]};background:color-mix(in srgb, ${ST[st]} 12%, transparent)">${st}</span><button type="button" class="t016-ib" aria-label="归档「${esc(t)}」">${ARCHIVE}</button>`;
+  return li;
+}
+[['首页主视觉定稿', 'MC', '进行中'], ['预订团建场地', 'JL', '评审中'], ['给新同事寄入职礼包', 'IM', '已完成'], ['重写入职邮件', 'TA', '阻塞']].forEach(a => tasks.append(taskRow(...a)));
+const EXT = { pdf: '#d9534f', fig: '#8a6be0', xlsx: '#2f9e5f', key: '#3d8bd9' };
+function fileRow(name, meta) {
+  const li = h('li', 't016-row'); li.dataset.name = name; li.tabIndex = -1;
+  const ext = name.split('.').pop();
+  li.innerHTML = `<span class="t016-ext" style="background:${EXT[ext]}">${ext.toUpperCase().slice(0, 4)}</span><b>${esc(name)}</b><span class="t016-fmeta">${meta}</span>`;
+  return li;
+}
+[['launch-plan.pdf', '1.2 MB · 昨天'], ['hero-v3.fig', '8.4 MB · 周四'], ['budget-q4.xlsx', '96 KB · 周二']].forEach(a => files.append(fileRow(...a)));
+function emptyCheck() {
+  const any = $$('.t016-row', tasks).some(r => !r.hidden);
+  let e = $('.t016-empty', tasks);
+  if (!any && !e) tasks.append(h('li', 't016-empty', '本周的任务都处理完了'));
+  if (any && e) e.remove();
+}
+function collapseRow(row, show) {   // 归档 / 恢复：高度和透明度一起动，减少动态效果时只淡入淡出
+  row.getAnimations().forEach(a => a.cancel());   // 归档动画还没播完就撤销：取消它，否则它的结束回调会再把行藏起来
+  const H = row.scrollHeight;
+  if (show) { row.hidden = false; emptyCheck(); }
+  const kf = RM() ? [{ opacity: 0 }, { opacity: 1 }] : [{ height: '0px', minHeight: '0px', opacity: 0 }, { height: H + 'px', minHeight: '0px', opacity: 1 }];
+  const a = play(row, show ? kf : kf.slice().reverse(), { duration: RM() ? 150 : 240, easing: SNAP });
+  if (!show) a.onfinish = () => { row.hidden = true; emptyCheck(); };
+}
+function flash(row) { row.classList.add('is-flash'); row.focus({ preventScroll: true }); row.scrollIntoView({ block: 'nearest' }); setTimeout(() => row.classList.remove('is-flash'), 900); }
+
+/* ===== Toast ===== */
+const slot = $('#t016-slot');
+const ICON = {
+  done: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4 4 9-9"/></svg>',
+  error: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6.5v7M12 17.5v.01"/></svg>',
+  spin: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke-width="2.4"><circle cx="12" cy="12" r="8" stroke="var(--t016-track)"/><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-linecap="round" stroke-dasharray="15 50"/></svg>',
+  count: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10" stroke="var(--t016-track)"/><circle class="t016-cd" cx="12" cy="12" r="10" stroke="currentColor" stroke-linecap="round" pathLength="100" stroke-dasharray="100" transform="rotate(-90 12 12)"/></svg><b></b>',
+};
+let cur = null;
+const statusDur = text => clamp(2400 + text.length * 120, 3000, 5000);   // 状态 Toast 3–5 秒，字多就久一些
+
+function fill(t, s, keepIcon) {
+  t.spec = s;
+  const layer = h('span', 't016-i is-' + s.icon, ICON[s.icon]);
+  keepIcon ? t.ico.append(layer) : t.ico.replaceChildren(layer);
+  const kids = [Object.assign(h('span', 't016-txt'), { textContent: s.text })];
+  if (s.action) kids.push(Object.assign(h('button', 't016-act'), { type: 'button', textContent: s.action.label }));
+  if (s.close) { const x = h('button', 't016-x', X_SVG); x.type = 'button'; x.setAttribute('aria-label', '关闭'); kids.push(x); }
+  t.line.replaceChildren(...kids);
+  t.el.classList.toggle('has-btn', !!(s.action || s.close));
+}
+function toast(s) {
+  const prev = cur;
+  const el = h('div', 't016-toast', '<span class="t016-sheen" aria-hidden="true"><i></i></span><span class="t016-ico" aria-hidden="true"></span><span class="t016-line"></span>');
+  const t = { el, ico: $('.t016-ico', el), line: $('.t016-line', el), origin: document.activeElement, gone: false, hover: false, focus: false };
+  cur = t;
+  fill(t, s);
+  el.addEventListener('click', e => {
+    if (e.target.closest('.t016-act')) t.spec.action.fn(t);
+    else if (e.target.closest('.t016-x')) leave(t);
+  });
+  el.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); leave(t); } });
+  el.addEventListener('pointerenter', () => { t.hover = true; hold(t); });
+  el.addEventListener('pointerleave', () => { t.hover = false; hold(t); });
+  el.addEventListener('focusin', () => { t.focus = true; hold(t); });
+  el.addEventListener('focusout', e => { if (!el.contains(e.relatedTarget)) { t.focus = false; hold(t); } });
+  const enter = () => {
+    t.pending = null; slot.append(el);
+    if (RM()) play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 150 });
+    else play(el, [   // 整条一起：下落 10、放大自 96%、模糊 8 → 清晰；透明度在 70% 处就到 1
+      { opacity: 0, transform: 'translateY(-10px) scale(.96)', filter: 'blur(8px)' },
+      { opacity: 1, offset: .7 },
+      { opacity: 1, transform: 'none', filter: 'blur(0px)' },
+    ], { duration: 500, easing: EASE });
+    if (t.spec.sheen) sheen(t, 120);
+    arm(t);
+  };
+  // 一次一条：旧的先离场，新的晚一点进来，两层模糊不叠在一起
+  if (prev && !prev.gone && prev.el.isConnected) { leave(prev); t.pending = setTimeout(enter, T(140)); }
+  else { if (prev) leave(prev); enter(); }
+  return t;
+}
+function sheen(t, delay) {
+  if (RM()) return;
+  play($('.t016-sheen i', t.el), [{ transform: 'translateX(-100%)' }, { transform: 'translateX(170%)' }], { duration: 900, delay, easing: 'ease-out', fill: 'backwards' });
+}
+/* 计时：自己记剩余时间；指针在上面或焦点在里面就暂停，倒计时环跟着停 */
+function arm(t) {
+  clearTimeout(t.tid); t.tid = null; t.cd?.cancel(); t.cd = null; cancelAnimationFrame(t.raf);
+  const d = t.spec.dur;
+  t.left = d == null ? null : T(d);
+  if (d == null) return;
+  if (t.spec.icon === 'count') {
+    const ring = $('.t016-i:last-child .t016-cd', t.ico), sec = $('.t016-i:last-child b', t.ico);
+    t.cd = ring.animate([{ strokeDashoffset: 0 }, { strokeDashoffset: 100 }], { duration: t.left, fill: 'forwards' });
+    const tick = () => { const left = t.tid ? t.left - (performance.now() - t.t0) : t.left; sec.textContent = Math.max(1, Math.ceil(left / K / 1000)); t.raf = requestAnimationFrame(tick); };
+    tick();
+  }
+  t.tid = null; hold(t);
+}
+function hold(t) {
+  if (t.left == null || t.gone) return;
+  if (t.hover || t.focus) {
+    if (t.tid) { clearTimeout(t.tid); t.tid = null; t.left -= performance.now() - t.t0; }
+    t.cd?.pause();
+  } else if (!t.tid) {
+    t.t0 = performance.now(); t.tid = setTimeout(() => leave(t), t.left); t.cd?.play();
+  }
+}
+function leave(t) {
+  if (t.gone) return;
+  t.gone = true; clearTimeout(t.tid); clearTimeout(t.pending); cancelAnimationFrame(t.raf);
+  if (cur === t) cur = null;
+  const el = t.el;
+  if (!el.isConnected) return;
+  // 焦点在里面就还给触发它的控件，不让焦点掉到页面开头
+  if (el.contains(document.activeElement)) (t.origin?.isConnected && !t.origin.closest('[hidden]') ? t.origin : $('#t016-new')).focus({ preventScroll: true });
+  const x = el.offsetLeft; Object.assign(el.style, { position: 'absolute', left: x + 'px', top: '0', pointerEvents: 'none' });
+  el.inert = true;
+  const a = RM() ? play(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 150, fill: 'forwards' })
+    : play(el, [{ opacity: 1, transform: 'none', filter: 'blur(0px)' }, { opacity: 0, transform: 'translateY(-6px)', filter: 'blur(6px)' }], { duration: 220, easing: 'ease-in', fill: 'forwards' });
+  a.onfinish = () => el.remove();
+}
+/* 原地变化：旧的一行克隆出来原地离场，真实的一行换内容进场，Toast 量出新宽度后过渡过去 */
+function update(t, s) {
+  if (t.gone) return;
+  if (!t.el.isConnected) { fill(t, s); return; }
+  const el = t.el, hadFocus = el.contains(document.activeElement);
+  if (RM()) {
+    fill(t, s);
+    play(t.line, [{ opacity: 0 }, { opacity: 1 }], { duration: 150 });
+    play(t.ico, [{ opacity: 0 }, { opacity: 1 }], { duration: 150 });
+  } else {
+    t.wAnim?.cancel();
+    const w0 = el.offsetWidth;
+    const ghost = t.line.cloneNode(true);
+    ghost.classList.add('is-ghost'); ghost.inert = true; ghost.setAttribute('aria-hidden', 'true');
+    Object.assign(ghost.style, { left: t.line.offsetLeft + 'px', top: t.line.offsetTop + 'px' });
+    el.append(ghost);
+    play(ghost, [{ opacity: 1, transform: 'none', filter: 'blur(0px)' }, { opacity: 0, transform: 'translateY(-5px)', filter: 'blur(4px)' }], { duration: 180, easing: 'ease-in', fill: 'forwards' }).onfinish = () => ghost.remove();
+    $$('.t016-i', t.ico).forEach(old => play(old, [{ opacity: 1, transform: 'none', filter: 'blur(0px)' }, { opacity: 0, transform: 'scale(.5)', filter: 'blur(3px)' }], { duration: 180, easing: 'ease-in', fill: 'forwards' }).onfinish = () => old.remove());
+    fill(t, s, true);
+    play(t.ico.lastElementChild, [{ opacity: 0, transform: 'rotate(-40deg) scale(.5)' }, { opacity: 1, transform: 'none' }], { duration: 300, delay: 100, easing: SNAP, fill: 'backwards' });
+    play(t.line, [{ opacity: 0, transform: 'translateY(5px)', filter: 'blur(4px)' }, { opacity: 1, transform: 'none', filter: 'blur(0px)' }], { duration: 300, delay: 100, easing: EASE, fill: 'backwards' });
+    el.classList.add('is-morph');
+    const w1 = el.offsetWidth;
+    t.wAnim = play(el, [{ width: w0 + 'px' }, { width: w1 + 'px' }], { duration: 380, easing: SNAP });
+    t.wAnim.onfinish = () => el.classList.remove('is-morph');
+    if (s.sheen) sheen(t, 60);
+  }
+  // 按钮被换掉时焦点不能丢：有新按钮就落在上面，没有就回到触发它的控件
+  if (hadFocus) { const b = $('button', t.line); (b || t.origin)?.focus({ preventScroll: true }); if (!b) t.focus = false; }
+  arm(t);
+}
+
+/* 三种 Toast 的触发 */
+$('#t016-share').addEventListener('click', () => toast({ icon: 'done', text: '链接已复制', sheen: true, dur: statusDur('链接已复制') }));
+$('#t016-new').addEventListener('click', () => {
+  const text = '整理 Q4 路线图评审意见，周五前同步给设计和工程';
+  const row = taskRow(text, 'ML', '进行中'); tasks.prepend(row); emptyCheck(); collapseRow(row, true);
+  toast({ icon: 'done', text: `已创建「${text}」`, sheen: true, dur: statusDur(text) });
+});
+tasks.addEventListener('click', e => {
+  const b = e.target.closest('.t016-ib'); if (!b) return;
+  const row = b.closest('.t016-row'), name = $('b', row).textContent;
+  collapseRow(row, false);
+  // 能撤销的操作直接执行，Toast 里给撤销；还在等选择，所以进场不扫光
+  toast({ icon: 'count', text: '任务已归档', close: true, dur: 6000, action: { label: '撤销', fn: t => {
+    collapseRow(row, true);
+    update(t, { icon: 'done', text: '任务已恢复', sheen: true, dur: 1500 });
+    t.origin = $('.t016-ib', row);
+  } } });
+});
+let uploading = false, upN = 0;
+const NAMES = ['brand-guide.pdf', 'q4-roadmap.key', 'vendor-quotes.xlsx'];
+const upBtn = $('#t016-upload');
+function upload(row) {
+  if (uploading) return;
+  uploading = true; upBtn.setAttribute('aria-disabled', 'true');
+  const retry = !!row, name = row ? row.dataset.name : NAMES[upN++ % NAMES.length];
+  if (!row) { row = fileRow(name, ''); files.prepend(row); }
+  const meta = $('.t016-fmeta', row);
+  meta.innerHTML = '<span class="t016-bar"><i></i></span>';
+  const bar = $('i', meta), fail = failNext && !retry, total = T(2400), t0 = performance.now();
+  const t = toast({ icon: 'spin', text: `正在上传 ${name}`, dur: null });
+  const step = now => {
+    const p = clamp((now - t0) / total);
+    bar.style.width = (fail ? Math.min(p, .62) : p) * 100 + '%';
+    if (p < 1) return requestAnimationFrame(step);
+    uploading = false; upBtn.removeAttribute('aria-disabled');
+    if (fail) {
+      // 要修的失败留在那一项上，直到重试成功；Toast 只是指过去
+      meta.innerHTML = '<span class="is-err">上传失败</span><button type="button" class="t016-retry">重试</button>';
+      $('.t016-retry', meta).onclick = () => upload(row);
+      update(t, { icon: 'error', text: `${name} 上传失败`, close: true, dur: 5000, action: { label: '查看', fn: tt => { leave(tt); $('.t016-retry', row)?.focus(); } } });
+      if (document.hidden) notify({ pic: 'logo', title: `${name} 没有传上去`, text: '已留在「文件」里，可以在那里重试。', btns: ['查看'] });
+      return;
+    }
+    meta.textContent = '2.4 MB · 刚刚';
+    update(t, { icon: 'done', text: '已上传到「文件」', sheen: true, close: true, dur: 3000, action: { label: '打开', fn: tt => { leave(tt); flash(row); } } });
+    // 用户已经切走：页面里的 Toast 看不到，放进通知列表；拿到授权时再发系统通知
+    if (document.hidden) {
+      notify({ pic: 'logo', title: `${name} 已上传`, text: '在「文件」里可以找到它。', btns: ['打开'] });
+      if ('Notification' in window && Notification.permission === 'granted') new Notification(`${name} 已上传`);
+    }
+  };
+  requestAnimationFrame(step);
+}
+upBtn.addEventListener('click', () => upload());
+
+/* ===== 通知 ===== */
+const ns = $('#t016-ns'), clearBtn = $('#t016-clear'), bell = $('#t016-bell'), badge = $('#t016-badge'), inboxEl = $('#t016-inbox'), say = $('#t016-say');
+const LOGO = {
+  logo: ['linear-gradient(135deg,#5b7cfa,#2f62e9)', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4 10-10"/></svg>'],
+  clock: ['linear-gradient(135deg,#f6b54a,#e0861c)', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 2"/></svg>'],
+  shield: ['linear-gradient(135deg,#f0716f,#cf3e3e)', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-5z"/></svg>'],
+  card: ['linear-gradient(135deg,#9a86f0,#6c50d8)', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="6" width="17" height="12" rx="2.5"/><path d="M3.5 10.5h17"/></svg>'],
+};
+// 人物头像用渐变 + 首字母代替照片；missing 是缺图时的退路：中性色底 + 首字母
+const SAMPLES = [
+  { pic: 'clock', title: '1 小时后到期', text: '「上线检查清单」今天 18:00 到期，还有 3 项没有完成。', btns: ['稍后提醒', '打开'], alert: true },
+  { pic: { who: 'MC' }, title: 'Maya Chen 提到了你', text: '「@Mira 定价页的文案能帮忙再看一遍吗？周五前要定稿。」', btns: ['回复', '打开'] },
+  { pic: 'logo', title: '周报已生成', text: '本周完成 18 个任务，5 个在评审中，看看哪些往前推了。', btns: ['查看周报'] },
+  { pic: 'shield', title: '新设备登录', text: 'MacBook Pro · 上海 · 刚刚。如果不是你本人，请立即修改密码。', btns: ['不是我', '是我'], decide: true, alert: true },
+  { pic: { who: 'JL', missing: true }, title: 'Jordan Lee 回复了你', text: '好的，我下午把场地报价发到群里，顺便附上三家供应商的对比表。你看完再决定要不要压一下预算，周一之前给我答复就行，不着急。', btns: ['回复'] },
+  { pic: 'card', title: '续费没有成功', text: 'Pro 套餐 ¥1,280 的自动续费被银行拒绝，请在 3 天内更新付款方式。', btns: ['稍后', '更新付款方式'], decide: true, alert: true },
+];
+function picHTML(p) {
+  if (typeof p === 'string') return `<span class="t016-pic" style="background:${LOGO[p][0]}">${LOGO[p][1]}</span>`;
+  return `<span class="t016-pic" style="background:${p.missing ? 'var(--t016-faint)' : `linear-gradient(135deg, color-mix(in srgb, ${PEOPLE[p.who]} 70%, #fff), ${PEOPLE[p.who]})`}">${p.who}</span>`;
+}
+const inbox = [];      // 铃铛后面的列表：还没处理的都在
+let screen = [];       // 屏幕上的，最新在前，最多三张
+let open = false, nid = 0, sampleI = 0;
+const baseTitle = document.title;
+function count() {
+  const n = inbox.length;
+  badge.hidden = !n; badge.textContent = n > 9 ? '9+' : n;
+  bell.setAttribute('aria-label', n ? `通知，${n} 条待处理` : '通知');
+  document.title = n ? `(${n}) ${baseTitle}` : baseTitle;
+  if (!inboxEl.hidden) renderInbox();
+}
+function notify(s) {
+  const n = { id: ++nid, s, at: Date.now() };
+  inbox.unshift(n);
+  const el = n.el = h('div', 't016-n');
+  el.innerHTML = `<button type="button" class="t016-n-x" aria-label="关闭「${esc(s.title)}」">${X_SVG}</button><div class="t016-n-box"><div class="t016-n-in">${picHTML(s.pic)}<div class="t016-n-head"><b>${esc(s.title)}</b><time>刚刚</time></div><p class="t016-n-text">${esc(s.text)}</p><div class="t016-n-acts">${s.btns.map((b, i) => `<button type="button" class="t016-n-btn${i === s.btns.length - 1 ? ' is-pri' : ''}">${esc(b)}</button>`).join('')}</div></div></div>`;
+  n.box = $('.t016-n-box', el); n.inner = $('.t016-n-in', el);
+  el.setAttribute('role', 'group'); el.setAttribute('aria-label', s.title);
+  el.addEventListener('click', e => {
+    if (e.target.closest('.t016-n-x')) dismiss([n]);
+    else if (e.target.closest('.t016-n-btn')) handled(n);   // 用卡片上的按钮处理过，也就移除
+  });
+  el.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); dismiss([n]); } });
+  el.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') el.classList.add('is-hover'); });
+  el.addEventListener('pointerleave', () => el.classList.remove('is-hover'));
+  swipe(n);
+  ns.prepend(el);
+  screen.unshift(n);
+  const drop = screen.length > 3 ? screen.pop() : null;   // 第四张退下屏幕，仍在铃铛列表里
+  layout({ arrive: n, drop, dur: 560 });
+  count();
+  if (s.alert) { say.textContent = ''; setTimeout(() => { say.textContent = `${s.title}。${s.text}`; }, 60); }   // 要注意的，到达时播报一次
+}
+/* 把每张卡从当前画面（可能在半路）动画到目标：transform、高度、内容透明度一起走 */
+function go(n, t, dur, coverDelay) {
+  const { el, box, inner } = n;
+  const tr0 = getComputedStyle(el).transform, h0 = getComputedStyle(box).height, c0 = +getComputedStyle(inner).opacity;
+  [el, box, inner].forEach(x => x.getAnimations().forEach(a => a.cancel()));
+  const tr = `translateY(${t.y}px) scale(${t.s})`;
+  el.style.transform = tr; box.style.height = t.h + 'px'; inner.style.opacity = t.c;
+  if (c0 !== t.c) play(inner, [{ opacity: c0 }, { opacity: t.c }], RM() ? { duration: 150 } : { duration: t.c ? 240 : 200, delay: coverDelay ? 140 : 0, easing: 'ease', fill: 'backwards' });
+  if (RM()) return;
+  play(el, [{ transform: tr0 === 'none' ? 'translateY(0px) scale(1)' : tr0 }, { transform: tr }], { duration: dur, easing: SNAP });
+  play(box, [{ height: h0 }, { height: t.h + 'px' }], { duration: dur, easing: SNAP });
+}
+function layout({ arrive, drop, dur = 380, removed } = {}) {
+  const hs = screen.map(n => n.inner.offsetHeight);
+  const front = hs[0] || 0;
+  let y = 0;
+  screen.forEach((n, i) => {
+    // 收起：裁成最前一张的高度，底边各露 12，缩到 95% / 90%；展开：各自高度，间距 8
+    const t = open ? { y, s: 1, h: hs[i], c: 1 } : { y: 12 * i, s: 1 - .05 * i, h: front, c: i ? 0 : 1 };
+    y += hs[i] + 8;
+    n.el.style.zIndex = 10 - i;
+    n.el.classList.toggle('is-front', i === 0);
+    n.el.inert = !open && i > 0 && !n.el.contains(document.activeElement);
+    if (n === arrive) {
+      const { el, box, inner } = n;
+      el.style.transform = `translateY(${t.y}px) scale(${t.s})`; box.style.height = t.h + 'px'; inner.style.opacity = 1;
+      if (RM()) play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 150 });
+      else play(el, [   // 从上方 56px 落到堆上，从轻微模糊变清晰
+        { transform: `translateY(${t.y - 56}px) scale(${t.s})`, opacity: 0, filter: 'blur(6px)' },
+        { opacity: 1, filter: 'blur(0px)', offset: .4 },
+        { transform: el.style.transform, opacity: 1, filter: 'blur(0px)' },
+      ], { duration: 560, easing: SNAP });
+    } else go(n, t, dur, arrive && i === 1);   // 被盖住的那张晚一点才收起内容：读起来是叠上去
+  });
+  if (drop) {
+    const { el } = drop; el.inert = true; el.style.pointerEvents = 'none';
+    play(el, RM() ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 1 }, { transform: `translateY(${12 * 3}px) scale(.85)`, opacity: 0 }], { duration: RM() ? 150 : dur, easing: SNAP, fill: 'forwards' }).onfinish = () => el.remove();
+  }
+  const listH = y - 8;
+  ns.style.height = 16 + (open ? listH + (screen.length ? 36 : 0) : front + 12 * Math.max(0, screen.length - 1)) + 'px';
+  if (!open) ns.scrollTop = 0;
+  clearBtn.classList.toggle('is-on', screen.length > 0);
+  const cy = Math.max(0, listH + 8);
+  const cy0 = new DOMMatrix(getComputedStyle(clearBtn).transform).m42;
+  clearBtn.getAnimations().forEach(a => a.cancel());
+  clearBtn.style.transform = `translateY(${cy}px)`;
+  if (open && !RM() && removed) play(clearBtn, [{ transform: `translateY(${cy0}px)` }, { transform: `translateY(${cy}px)` }], { duration: dur, easing: SNAP });
+  ns.classList.toggle('is-open', open);
+}
+function setOpen(v) { if (v === open) return; open = v; layout({ dur: 380 }); }
+function takeOff(list) {   // 从屏幕上拿掉：右移 48 并淡出，其余 400ms 补位
+  const focusWas = list.some(n => n.el.contains(document.activeElement));
+  list.forEach(n => {
+    screen = screen.filter(x => x !== n);
+    const { el } = n, dx = n.dx || 0; el.inert = true; el.style.pointerEvents = 'none';
+    play(el, RM() ? [{ opacity: 1 }, { opacity: 0 }] : [{ translate: `${dx}px 0`, opacity: 1 }, { translate: `${dx + 48}px 0`, opacity: 0 }], { duration: RM() ? 150 : 260, easing: 'ease-in', fill: 'forwards' }).onfinish = () => el.remove();
+  });
+  // 焦点在被拿掉的卡上：落到下一张卡的第一个按钮，没有了就回铃铛
+  if (focusWas) ($('.t016-n-btn', screen[0]?.el || document.createElement('i')) || bell).focus({ preventScroll: true });
+  if (!screen.length) open = false;
+  layout({ dur: 400, removed: true });
+}
+function dismiss(list) {   // 关闭或清除：普通的从列表里去掉，需要决定的（安全、付款）留在铃铛后面
+  list.forEach(n => { if (!n.s.decide) inbox.splice(inbox.indexOf(n), 1); });
+  takeOff(list); count();
+}
+function handled(n) {
+  if (inbox.includes(n)) inbox.splice(inbox.indexOf(n), 1);
+  if (screen.includes(n)) takeOff([n]);
+  count();
+}
+clearBtn.addEventListener('click', () => dismiss(screen.slice()));
+// 悬停展开；键盘进入也展开；触摸没有悬停，点一下展开
+ns.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') setOpen(true); });
+ns.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !ns.contains(document.activeElement)) setOpen(false); });
+ns.addEventListener('focusin', () => setOpen(true));
+ns.addEventListener('focusout', e => { if (!ns.contains(e.relatedTarget) && !ns.matches(':hover')) setOpen(false); });
+let swallow = false;
+ns.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' && !open && screen.length) { setOpen(true); swallow = true; } });
+ns.addEventListener('click', e => { if (swallow) { swallow = false; e.stopPropagation(); e.preventDefault(); } }, true);
+document.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' && open && !ns.contains(e.target)) setOpen(false); });
+// 滑动关闭：用独立的 translate 属性跟手，不和布局用的 transform 打架
+function swipe(n) {
+  let x0 = null, id = null;
+  n.box.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; x0 = e.clientX; id = e.pointerId; n.dx = 0; });
+  n.box.addEventListener('pointermove', e => {
+    if (e.pointerId !== id || x0 == null) return;
+    const dx = e.clientX - x0;
+    if (Math.abs(dx) > 4 && !n.box.hasPointerCapture(id)) n.box.setPointerCapture(id);
+    n.dx = dx > 0 ? dx : dx / 4; n.el.style.translate = `${n.dx}px 0`;
+  });
+  const end = e => {
+    if (e.pointerId !== id || x0 == null) return;
+    x0 = null;
+    if (n.dx > 64) { n.el.style.translate = ''; dismiss([n]); }
+    else if (n.dx) { play(n.el, [{ translate: `${n.dx}px 0` }, { translate: '0px 0' }], { duration: 240, easing: SNAP }); n.el.style.translate = ''; n.dx = 0; }
+  };
+  n.box.addEventListener('pointerup', end); n.box.addEventListener('pointercancel', end);
+}
+// 铃铛后面的列表
+function ago(at) { const m = Math.round((Date.now() - at) / 60000); return m < 1 ? '刚刚' : `${m} 分钟前`; }
+function renderInbox() {
+  const ul = $('#t016-inbox-list');
+  ul.replaceChildren(...(inbox.length ? inbox.map(n => {
+    const li = h('li'); const b = h('button', 't016-ib-item'); b.type = 'button';
+    b.innerHTML = `${picHTML(n.s.pic)}<b>${esc(n.s.title)}</b><span>${n.s.decide && !screen.includes(n) ? '<em class="is-keep">待你决定</em> · ' : ''}${ago(n.at)} · ${esc(n.s.text)}</span>`;
+    b.onclick = () => { handled(n); if (!inbox.length) bell.focus(); else $('.t016-ib-item', ul)?.focus(); };
+    li.append(b); return li;
+  }) : [h('li', 't016-empty', '没有待处理的通知')]));
+}
+function setInbox(v) {
+  inboxEl.hidden = !v; bell.setAttribute('aria-expanded', String(v));
+  if (v) { renderInbox(); (play(inboxEl, [{ opacity: 0 }, { opacity: 1 }], { duration: 150 })); }
+}
+bell.addEventListener('click', () => setInbox(inboxEl.hidden));
+inboxEl.addEventListener('keydown', e => { if (e.key === 'Escape') { setInbox(false); bell.focus(); } });
+document.addEventListener('pointerdown', e => { if (!inboxEl.hidden && !inboxEl.contains(e.target) && !bell.contains(e.target)) setInbox(false); });
+
+/* ===== 控件 ===== */
+$('#t016-push').addEventListener('click', () => notify(SAMPLES[sampleI++ % SAMPLES.length]));
+seg($('#t016-fail'), v => { failNext = v === 'fail'; });
+seg($('#t016-mode'), v => { app.dataset.mode = v; });
+seg($('#t016-motion'), v => { rmForced = v === 'reduce'; });
+seg($('#t016-speed'), v => { K = +v; });
+if (isDarkTheme()) $('#t016-mode button[data-v="dark"]').click();
+count();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>007 · 让文字排版更顺眼</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 007 排版 ---------- */
+.t-ctrl { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
+.t-ctrl input { width: min(260px, 50vw); }
+.t-ctrl output { font: 12px var(--mono); color: var(--fg); min-width: 48px; }
+.t-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+@media (max-width: 760px) { .t-grid { grid-template-columns: minmax(0, 1fr); } }
+.t-col { background: var(--surface); border-radius: 14px; padding: 20px; box-shadow: 0 0 0 1px var(--line); min-width: 0; overflow: hidden; }
+.t-col > header { font: 500 12.5px var(--mono); color: var(--muted); margin-bottom: 14px; }
+.t-box { width: var(--tw, 100%); max-width: 100%; border-right: 1px dashed var(--line-strong); padding-right: 8px; }
+.t-box h3 { font: 620 21px/1.38 var(--font); margin: 0 0 10px; letter-spacing: -.005em; }
+.t-box p { margin: 0 0 14px; font-size: 15px; line-height: 1.75; }
+.t-box hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+.t-btns { display: flex; gap: 8px; }
+.t-btns button { width: 112px; height: 36px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--stage); font-size: 13px; font-weight: 500; line-height: 1.15; padding: 0 8px; overflow: hidden; }
+.t-bad h3, .t-bad p { word-break: break-all; line-break: anywhere; text-spacing-trim: space-all; text-autospace: no-autospace; }
+.t-bad p:lang(en) { text-align: justify; }
+.t-good h3 { text-wrap: balance; text-autospace: normal; }
+.t-good .kp { white-space: nowrap; }
+.t-good p { text-wrap: pretty; line-break: strict; word-break: normal; overflow-wrap: break-word; text-spacing-trim: normal; text-autospace: normal; hanging-punctuation: allow-end; }
+.t-good p:lang(en) { hyphens: auto; }
+.t-good p:lang(zh) { text-align: justify; }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="006-book-card.html">← 006</a><a href="008-wiki-layout.html">008 →</a></span></nav>
+<section class="tip" id="t007">
+  <div class="tip-h"><span class="no">007</span><h2>让文字排版更顺眼</h2><a class="src" href="https://x.com/Kubai087/status/2116555064227811412" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">对齐、行长不均、避头尾，几行 CSS 就能处理。拖动宽度，看两边换行的差别。</p>
+  <div class="stage">
+    <div class="t-ctrl"><label for="tWidth">容器宽度</label><input type="range" id="tWidth" min="220" max="520" value="330"><output for="tWidth" id="tWidthOut">330px</output></div>
+    <div class="t-grid">
+      <div class="t-col"><header>默认 · break-all + 两端对齐</header>
+        <div class="t-box t-bad">
+          <h3 lang="zh">让Vibe出来的产品，不再一眼就看出是AI做的</h3>
+          <p lang="zh">做i18n的时候，让Agent结合网页布局挑选合适的译文：避免一个英文单词被拆到两行，也避免「，」「。」这样的标点跑到行首。按钮、标签这些空间有限的地方，宁可换一个更短的说法。</p>
+          <p lang="en">Balance short headlines, avoid a lonely word at the end of a paragraph, and never let internationalization split in the middle of a line.</p>
+          <hr>
+          <div class="t-btns" lang="de"><button type="button">Einstellungen speichern</button><button type="button">Herunterladen</button></div>
+        </div>
+      </div>
+      <div class="t-col"><header>优化 · balance / pretty / strict / autospace</header>
+        <div class="t-box t-good">
+          <h3 lang="zh">让Vibe出来的产品，<span class="kp">不再一眼就看出</span>是AI做的</h3>
+          <p lang="zh">做i18n的时候，让Agent结合网页布局挑选合适的译文：避免一个英文单词被拆到两行，也避免「，」「。」这样的标点跑到行首。按钮、标签这些空间有限的地方，宁可换一个更短的说法。</p>
+          <p lang="en">Balance short headlines, avoid a lonely word at the end of a paragraph, and never let internationalization split in the middle of a line.</p>
+          <hr>
+          <div class="t-btns" lang="de"><button type="button">Speichern</button><button type="button">Laden</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ul class="specs"><li>text-wrap: balance / pretty</li><li>line-break: strict（避头尾）</li><li>text-autospace（中西文间距，Chrome 140+）</li><li>i18n：按布局选更短的译文</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 007 排版 ---------- */
+(() => {
+  const r = $('#tWidth'), out = $('#tWidthOut');
+  const apply = () => { $$('.t-box').forEach(b => b.style.setProperty('--tw', r.value + 'px')); out.textContent = r.value + 'px'; };
+  r.addEventListener('input', apply);
+  apply();
+})();
+</script>
+</body>
+</html>

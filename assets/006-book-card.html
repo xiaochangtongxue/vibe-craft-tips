@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>006 · 像书一样翻开的卡片</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 006 书卡 ---------- */
+.k-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1040px) { .k-grid { grid-template-columns: minmax(0, 1fr); } }
+.k-wall { position: relative; border-radius: 16px; padding: 48px 24px; display: grid; place-items: center; min-height: 360px; overflow: hidden; }
+.k-wall--default { background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+.k-wall--skeuo { background-color: #d6ccbd;
+  background-image: radial-gradient(55% 48% at 50% 26%, rgba(255,246,228,.85), rgba(255,246,228,0) 72%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .28 0 0 0 0 .2 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.k-wall--minimal { background-color: #e4e7ec; background-image: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0) 60%), radial-gradient(rgba(60,70,90,.2) 1px, transparent 1.3px); background-size: auto, 24px 24px; }
+.k-label { position: absolute; left: 16px; top: 12px; font: 500 12px var(--mono); color: var(--muted); }
+.k-wall--skeuo .k-label { color: #6d5f4d; }
+.k-wall--minimal .k-label { color: #6a7382; }
+.book { --A: 42deg; --N: 4; --R: 20px; --ss: 1; --tint: #2a3340; position: relative; display: block; width: 256px; max-width: 100%; aspect-ratio: 1; perspective: 1100px; perspective-origin: 30% 50%;
+  text-decoration: none; color: inherit; border-radius: var(--R); -webkit-tap-highlight-color: transparent; }
+.book:focus-visible { outline-offset: 4px; }
+.k-body { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; }
+.leaf { position: absolute; inset: 0; border-radius: var(--R); overflow: hidden; transform-origin: 0 50%; backface-visibility: hidden;
+  transform: translateZ(var(--z)) rotateY(0deg);
+  transition: transform 420ms cubic-bezier(.3, 1.2, .5, 1); transition-delay: calc((var(--N) - var(--n)) * 28ms); }
+.book:hover .leaf:not(.back), .book:focus-visible .leaf:not(.back) { transform: translateZ(var(--z)) rotateY(calc(var(--A) * var(--k) * -1)); transition-delay: calc(var(--n) * 28ms); }
+.leaf.page { inset: 8px 8px 8px 4px; border-radius: calc(var(--R) - 8px); }
+.leaf.back { inset: 6px; border-radius: calc(var(--R) - 6px); }
+.leaf .shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0,0,0,.32), rgba(0,0,0,.08) 55%, rgba(0,0,0,0) 85%); opacity: 0; transition: opacity 320ms ease; transition-delay: inherit; }
+.book:hover .leaf .shade, .book:focus-visible .leaf .shade { opacity: var(--sh); }
+.k-sh { position: absolute; pointer-events: none; border-radius: var(--R); background: var(--tint); transition: opacity 360ms ease, transform 420ms cubic-bezier(.3, 1.1, .5, 1); }
+.k-sh.c { left: 4px; right: 4px; top: 50%; bottom: 0; filter: blur(4px); transform: translateY(2px); opacity: calc(.22 * var(--ss)); }
+.k-sh.a { inset: 0; filter: blur(14px); transform: translateY(6px); opacity: calc(.12 * var(--ss)); }
+.k-sh.co { left: 4px; right: 4px; top: 50%; bottom: 0; filter: blur(12px); transform: translateY(12px); opacity: 0; }
+.k-sh.ao { inset: 0; filter: blur(38px); transform: translateY(26px); opacity: 0; }
+.book:hover .k-sh.c, .book:hover .k-sh.a, .book:focus-visible .k-sh.c, .book:focus-visible .k-sh.a { opacity: 0; }
+.book:hover .k-sh.co, .book:focus-visible .k-sh.co { opacity: calc(.22 * var(--ss)); transform: translateY(26px) scaleX(1.04); }
+.book:hover .k-sh.ao, .book:focus-visible .k-sh.ao { opacity: calc(.12 * var(--ss)); transform: translateY(40px) scaleX(1.04); }
+/* Default */
+.book--default { --ss: .5; --tint: #253146; }
+.book--default .leaf { background: var(--surface); border: 1px solid var(--line-strong); }
+.book--default .cover { padding: 20px; display: flex; flex-direction: column; }
+.c-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.c-ico { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: linear-gradient(180deg, #4f7bff, #2c55dc); box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
+.c-ico svg { width: 24px; height: 24px; }
+.c-arrow { width: 18px; height: 18px; color: var(--muted); }
+.book--default h3 { margin: auto 0 4px; font: 600 24px/1.2 var(--font); letter-spacing: -.015em; }
+.book--default .cover p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--muted); }
+.c-meta { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); display: flex; justify-content: space-between; }
+.pg { position: absolute; inset: 0; padding: 18px 16px 16px 22px; display: flex; flex-direction: column; gap: 9px; }
+.pg b { display: block; height: 9px; width: 46%; border-radius: 3px; background: var(--line-strong); margin-bottom: 4px; }
+.pg i { display: block; height: 5px; border-radius: 3px; background: var(--line); }
+.book--default .page { background: linear-gradient(90deg, color-mix(in srgb, var(--fg) 5%, var(--surface)), var(--surface) 30%); }
+/* Skeuomorphic */
+.book--skeuo { --R: 10px; --tint: #4a3a2c; --ss: 1; }
+.book--skeuo .cover { background-color: #23463f; color: #f2e8d2;
+  background-image: repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgba(0,0,0,.07) 0 1px, transparent 1px 3px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), inset 0 -2px 0 rgba(0,0,0,.3), inset 3px 0 0 rgba(0,0,0,.18); }
+.book--skeuo .cover::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0) 28%, rgba(0,0,0,0) 72%, rgba(0,0,0,.22)); }
+.book--skeuo .cover h3 { position: absolute; left: 20px; bottom: 18px; right: 20px; margin: 0; font: 400 32px/1.02 var(--serif); letter-spacing: -.005em; }
+.book--skeuo .cover .emb { position: absolute; left: 20px; top: 20px; width: 34px; height: 34px; border: 1px solid rgba(242,232,210,.45); border-radius: 50%; display: grid; place-items: center; font: italic 16px var(--serif); color: rgba(242,232,210,.75); }
+.book--skeuo .page { background-color: #f3ead8; box-shadow: inset -2px 0 0 rgba(120,96,60,.18);
+  background-image: repeating-linear-gradient(90deg, transparent 0 calc(100% - 6px), rgba(140,112,70,.14) calc(100% - 6px) calc(100% - 5px), transparent calc(100% - 5px) calc(100% - 4px), rgba(140,112,70,.12) calc(100% - 4px) calc(100% - 3px), transparent calc(100% - 3px)); }
+.book--skeuo .pg b { background: none; height: auto; width: auto; font: italic 400 15px/1 var(--serif); color: #6e5638; }
+.book--skeuo .pg i { background: rgba(110,86,56,.2); height: 4px; }
+.book--skeuo .back { inset: 0; border-radius: var(--R); background: #19322d; }
+/* Minimal */
+.book--minimal { --R: 14px; --tint: #2c3646; --ss: 1; }
+.book--minimal .cover { background: #f5f6f8; color: #1d232d; padding: 18px; display: flex; flex-direction: column; box-shadow: inset 0 0 0 1px rgba(20,30,45,.08), inset 0 1px 0 #fff; }
+.book--minimal .cover::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,0) 22%, rgba(0,0,0,0) 80%, rgba(20,30,45,.05)); pointer-events: none; }
+.mn-top { display: flex; justify-content: space-between; font: 500 11.5px var(--mono); color: #6a7382; padding-bottom: 10px; border-bottom: 1px solid rgba(20,30,45,.12); }
+.mn-dia { flex: 1; display: grid; place-items: center; }
+.mn-dia svg { width: 112px; height: 84px; }
+.book--minimal h3 { margin: 0; font: 600 19px/1.25 var(--font); letter-spacing: -.01em; }
+.book--minimal .cover small { display: block; margin-top: 4px; font-size: 12px; color: #7a8391; }
+.book--minimal .page { background: #fbfcfd; box-shadow: inset 0 0 0 1px rgba(20,30,45,.06); }
+.book--minimal .pg b { background: rgba(20,30,45,.16); }
+.book--minimal .pg i { background: rgba(20,30,45,.08); }
+.book--minimal .back { background: #d9dde4; }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="005-drag-reorder.html">← 005</a><a href="007-typography.html">007 →</a></span></nav>
+<section class="tip" id="t006">
+  <div class="tip-h"><span class="no">006</span><h2>像书一样翻开的卡片</h2><a class="src" href="https://x.com/Kubai087/status/2116198373040759107" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">平时就是一张普通卡片，悬停或聚焦时像一本小书翻开一点。同一套动效，三种风格。</p>
+  <div class="stage">
+    <div class="k-grid">
+      <div class="k-wall k-wall--default"><span class="k-label">Default</span>
+        <a class="book book--default" href="#t006" aria-label="Lumno：Spotlight 式的新标签页">
+          <div class="k-body"><div class="leaf cover">
+            <div class="c-top"><span class="c-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg></span><svg class="c-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg></div>
+            <h3>Lumno</h3><p>Spotlight 式的新标签页与命令面板</p>
+            <div class="c-meta"><span>Chrome 扩展</span><span>v2.3</span></div>
+          </div></div>
+        </a>
+      </div>
+      <div class="k-wall k-wall--skeuo"><span class="k-label">Skeuomorphic</span>
+        <a class="book book--skeuo" href="#t006" aria-label="Threads of Light 精装书">
+          <div class="k-body"><div class="leaf cover"><span class="emb">K</span><h3>Threads<br>of Light</h3></div></div>
+        </a>
+      </div>
+      <div class="k-wall k-wall--minimal"><span class="k-label">Minimal</span>
+        <a class="book book--minimal" href="#t006" aria-label="递进式圆角与连续曲率 设计规范">
+          <div class="k-body"><div class="leaf cover">
+            <div class="mn-top"><span>§ 04</span><span>v1.2</span></div>
+            <div class="mn-dia"><svg viewBox="0 0 112 84" fill="none" stroke-width="1.2"><rect x="4" y="4" width="104" height="76" rx="20" stroke="#9aa3b1"/><rect x="16" y="16" width="80" height="52" rx="8" stroke="#9aa3b1"/><rect x="24" y="24" width="40" height="14" rx="0.5" stroke="#2f62e9" stroke-width="1.6"/><path d="M4 24a20 20 0 0 1 20-20" stroke="#2f62e9" stroke-width="1.6"/></svg></div>
+            <h3>递进式圆角<br>与连续曲率</h3><small>Shape · 设计规范</small>
+          </div></div>
+        </a>
+      </div>
+    </div>
+  </div>
+  <ul class="specs"><li>封面 + 4 页 + 封底，绕左边翻开</li><li>角度 = 42° × 0.7ⁿ，延迟 = 28ms × n</li><li>合上倒序</li><li>阴影：两组预模糊实心形状交叉淡入</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 006 书卡：生成内页与封底 ---------- */
+(() => {
+  const N = 4, A = 42;
+  const k = n => Math.pow(.7, n);
+  // 内页阴影：前一页刚掀起时最暗，分开后变亮
+  const shadeOf = gap => clamp(gap / 6) * Math.max(0, 1 - gap / 30);
+  $$('.book').forEach(book => {
+    const body = $('.k-body', book), cover = $('.cover', body);
+    const skeuo = book.classList.contains('book--skeuo');
+    book.style.setProperty('--N', N);
+    const set = (el, n) => { el.style.setProperty('--n', n); el.style.setProperty('--k', n > N ? 0 : k(n)); el.style.setProperty('--z', (N + 1 - n) * .6 + 'px'); };
+    const backEl = document.createElement('div');
+    backEl.className = 'leaf back';
+    set(backEl, N + 1);
+    backEl.innerHTML = `<div class="shade" style="--sh:${shadeOf(A * k(N)).toFixed(2)}"></div>`;
+    body.insertBefore(backEl, cover);
+    for (let n = N; n >= 1; n--) {
+      const pg = document.createElement('div');
+      pg.className = 'leaf page';
+      set(pg, n);
+      const widths = [92, 100, 86, 97, 64];
+      pg.innerHTML = `<div class="pg"><b>${skeuo ? ['Chapter I', 'Chapter II', 'Chapter III', 'Chapter IV'][n - 1] : ''}</b>${widths.map(w => `<i style="width:${w}%"></i>`).join('')}</div><div class="shade" style="--sh:${shadeOf(A * (k(n - 1) - k(n))).toFixed(2)}"></div>`;
+      body.insertBefore(pg, cover);
+    }
+    set(cover, 0);
+    ['c', 'a', 'co', 'ao'].forEach(c => { const s = document.createElement('div'); s.className = 'k-sh ' + c; book.insertBefore(s, body); });
+  });
+})();
+</script>
+</body>
+</html>

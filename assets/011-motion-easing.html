@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>011 · 选对动画的节奏</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 011 动画节奏 ---------- */
+/* 曲线和时长都是 token：组件只引用 token，不各自手调 */
+.e-root { --slow: 1;
+  --ease-linear: linear;
+  --ease-out: cubic-bezier(0, 0, .58, 1);
+  --ease-out-strong: cubic-bezier(.22, 1, .36, 1);
+  --ease-in: cubic-bezier(.42, 0, 1, 1);
+  --ease-in-out: cubic-bezier(.42, 0, .58, 1);
+  --ease-overshoot: cubic-bezier(.34, 1.56, .64, 1);
+  --ease-spring: linear(0, .32, .78, 1.04, 1.09, 1.06, 1.02, 1, .99, .99, 1);
+  --ease-default: ease;
+  --duration-sm: 200ms; --duration-sm-out: 150ms; --duration-md: 300ms; --duration-lg: 420ms;
+}
+/* 两种反面示范只换 token：全部留在默认 ease；入场退场用反、换位用 linear */
+.e-roles[data-mode="ease"] { --ease-linear: ease; --ease-out: ease; --ease-out-strong: ease; --ease-in: ease; --ease-in-out: ease; --ease-overshoot: ease; --ease-spring: ease; }
+.e-roles[data-mode="wrong"] { --ease-linear: ease-in-out; --ease-out: cubic-bezier(.42, 0, 1, 1); --ease-out-strong: cubic-bezier(.42, 0, 1, 1); --ease-in: cubic-bezier(0, 0, .58, 1); --ease-in-out: linear; --ease-overshoot: linear; --ease-spring: cubic-bezier(.42, 0, 1, 1); }
+.e-dur { white-space: nowrap; display: flex; align-items: center; gap: 10px; flex: 1; min-width: 220px; max-width: 380px; font-size: 13px; color: var(--muted); }
+.e-dur output { font: 500 12.5px var(--mono); color: var(--fg); width: 58px; }
+.e-lab { margin-top: 18px; background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--line); padding: 4px 18px; }
+.e-row { display: grid; grid-template-columns: 200px 64px minmax(0, 1fr); gap: 16px; align-items: center; padding: 12px 0; }
+.e-row + .e-row { border-top: 1px solid var(--line); }
+.e-name b { display: block; font-size: 14px; font-weight: 600; }
+.e-name code { display: block; font: 11px/1.5 var(--mono); color: var(--faint); overflow-wrap: anywhere; }
+.e-name span { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.e-row.bad b { color: var(--muted); }
+.e-row.bad { --c: var(--faint); }
+.e-curve { width: 64px; height: 64px; display: block; overflow: visible; }
+.e-curve .ax { fill: none; stroke: var(--line-strong); stroke-width: 1; }
+.e-curve .goal { fill: none; stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 2 2; }
+.e-curve .c { fill: none; stroke: var(--c, var(--accent)); stroke-width: 1.75; stroke-linecap: round; }
+.e-curve circle { fill: var(--c, var(--accent)); }
+.e-track { position: relative; display: block; width: 100%; height: 36px; padding: 0; border: 0; border-radius: 10px; background: var(--stage); cursor: pointer; overflow: hidden; }
+/* e-run 的宽度就是 0→1 的距离；右侧留出约 14% 给 Overshoot / Spring 冲过终点 */
+.e-run { position: absolute; top: 0; bottom: 0; left: 11px; width: calc(84% - 36px); }
+.e-run .start, .e-run .goal { position: absolute; top: 7px; bottom: 7px; width: 1px; background: var(--line-strong); }
+.e-run .start { left: 7px; }
+.e-run .goal { left: calc(100% + 7px); }
+.e-run i { position: absolute; top: 11px; left: calc(var(--v) * 100%); width: 14px; height: 14px; border-radius: 50%; background: var(--c, var(--accent)); opacity: .13; }
+.e-mover { position: absolute; inset: 0; pointer-events: none; }
+.e-mover b { position: absolute; top: 11px; left: 0; width: 14px; height: 14px; border-radius: 50%; background: var(--c, var(--accent)); box-shadow: 0 0 0 3px var(--accent-soft), 0 2px 6px -1px rgba(0,0,0,.25); }
+@media (max-width: 640px) {
+  .e-row { grid-template-columns: 48px minmax(0, 1fr); gap: 8px 12px; }
+  .e-name { grid-column: 1 / -1; }
+  .e-curve { width: 48px; height: 48px; }
+}
+.e-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-top: 18px; }
+.e-box { position: relative; height: 184px; border-radius: 10px; background: var(--stage); overflow: hidden; display: grid; place-items: center; }
+/* 入场：从顶边来、短距离、从 96% 长大、透明度先到；内部图标晚 120ms 用 strong ease-out 落位 */
+.e-toast { position: absolute; top: 12px; left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 8px; padding: 7px 14px 7px 8px; border-radius: 999px; background: #1b2030; color: #f1f3f8; font-size: 13px; white-space: nowrap; box-shadow: 0 10px 24px -8px rgba(0,0,0,.4); pointer-events: none;
+  opacity: 0; transform: translateY(-16px) scale(.96); filter: blur(8px);
+  transition: transform calc(var(--duration-sm-out) * var(--slow)) var(--ease-in), opacity calc(var(--duration-sm-out) * var(--slow)) var(--ease-in), filter calc(var(--duration-sm-out) * var(--slow)) var(--ease-in); }
+.e-toast.in { opacity: 1; transform: none; filter: blur(0);
+  transition: transform calc(var(--duration-sm) * var(--slow)) var(--ease-out), opacity calc(var(--duration-sm) * .6 * var(--slow)) var(--ease-out), filter calc(var(--duration-sm) * var(--slow)) var(--ease-out); }
+.e-toast i { width: 20px; height: 20px; border-radius: 50%; background: #3fb950; display: grid; place-items: center; opacity: 0; transform: scale(.4) rotate(-30deg); transition: transform 100ms var(--ease-in), opacity 100ms var(--ease-in); }
+.e-toast.in i { opacity: 1; transform: none; transition: transform calc(260ms * var(--slow)) var(--ease-out-strong) calc(120ms * var(--slow)), opacity calc(120ms * var(--slow)) var(--ease-out) calc(120ms * var(--slow)); }
+.e-tabbox { place-items: center; align-content: center; gap: 14px; }
+.e-tabs { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); width: min(272px, calc(100% - 32px)); padding: 3px; border-radius: 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.e-tabs button { position: relative; z-index: 1; height: 30px; border: 0; background: transparent; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; transition: color calc(var(--duration-md) * var(--slow)) var(--ease-in-out); }
+.e-tabs button[aria-pressed="true"] { color: var(--bg); }
+.e-tabs .ind { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 4); border-radius: 7px; background: var(--fg); transform: translateX(calc(var(--i, 0) * 100%)); transition: transform calc(var(--duration-md) * var(--slow)) var(--ease-in-out); }
+.e-pages { width: min(272px, calc(100% - 32px)); height: 72px; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+.e-strip { display: flex; width: 400%; height: 100%; transform: translateX(calc(var(--i, 0) * -25%)); transition: transform calc(var(--duration-lg) * var(--slow)) var(--ease-in-out); }
+.e-strip > div { flex: 1; display: grid; place-items: center; font: 500 13px var(--mono); color: var(--muted); background: var(--surface); }
+.e-strip > div:nth-child(2) { background: color-mix(in srgb, var(--surface), #ff8a5c 14%); }
+.e-strip > div:nth-child(3) { background: color-mix(in srgb, var(--surface), #3fb950 14%); }
+.e-strip > div:nth-child(4) { background: color-mix(in srgb, var(--surface), var(--accent) 16%); }
+.e-pops { align-content: center; gap: 18px; }
+.e-like { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px 0 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; font: 500 13.5px var(--mono); }
+.e-like svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; transition: fill 120ms, stroke 120ms; }
+.e-like[aria-pressed="true"] svg { fill: #e5484d; stroke: #e5484d; }
+.e-num { display: inline-block; overflow: hidden; }
+.e-num span { display: inline-block; }
+.e-check { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+.e-check input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.e-check input:focus-visible + .e-cb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.e-cb { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid var(--line-strong); background: var(--surface); display: grid; place-items: center; transition: background-color 120ms, border-color 120ms; }
+.e-cb svg { width: 14px; height: 14px; fill: none; stroke: var(--on-accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 20; stroke-dashoffset: 20; transition: stroke-dashoffset 100ms var(--ease-in); }
+.e-check input:checked + .e-cb { background: var(--accent); border-color: var(--accent); }
+.e-check input:checked + .e-cb svg { stroke-dashoffset: 0; transition: stroke-dashoffset calc(var(--duration-sm) * var(--slow)) var(--ease-out-strong) calc(60ms * var(--slow)); }
+/* 抽屉：拖动时 1:1 跟手、不加缓动；松手才用 spring 归位。底部多出 40px，回弹冲过头时不露底 */
+.e-phone { display: block; }
+.e-sheet { --y: 106px; position: absolute; left: 10px; right: 10px; bottom: -40px; height: 190px; padding: 0 16px 40px; border-radius: 16px 16px 0 0; background: var(--surface); box-shadow: 0 -6px 20px -10px rgba(0,0,0,.3), 0 0 0 1px var(--line); touch-action: none; cursor: grab; user-select: none; transform: translateY(var(--y)); }
+.e-sheet.settle { transition: transform calc(var(--duration-md) * 1.5 * var(--slow)) var(--ease-spring); }
+.e-handle { display: block; width: 100%; height: 22px; padding: 0; border: 0; background: transparent; cursor: inherit; }
+.e-handle::before { content: ""; display: block; width: 36px; height: 4px; margin: 0 auto; border-radius: 2px; background: var(--line-strong); }
+.e-sheet b { display: block; font-size: 14px; font-weight: 600; }
+.e-sheet ul { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--muted); }
+.e-sheet li { display: flex; justify-content: space-between; }
+.e-sheet li span { font: 12px var(--mono); color: var(--faint); }
+.e-up { width: min(260px, calc(100% - 32px)); display: flex; flex-direction: column; gap: 10px; }
+.e-up-h { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.e-up-h > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.e-up .o-btn:disabled { opacity: .5; cursor: default; }
+.e-spin { display: none; flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: e-spin calc(900ms * var(--slow)) var(--ease-linear) infinite; }
+.e-up.run .e-spin { display: block; }
+@keyframes e-spin { to { transform: rotate(1turn); } }
+.e-bar { height: 6px; border-radius: 3px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+.e-bar i { display: block; height: 100%; background: var(--accent); transform-origin: left; transform: scaleX(0); }
+.e-up.run .e-bar i { transform: none; transition: transform calc(2400ms * var(--slow)) var(--ease-linear); }
+.e-up.done .e-bar i { transform: none; }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="010-liquid-glass.html">← 010</a><a href="012-chat-bubble.html">012 →</a></span></nav>
+<section class="tip e-root" id="t011">
+  <div class="tip-h"><span class="no">011</span><h2>选对动画的节奏</h2><a class="src" href="https://x.com/Kubai087/status/2118143759984803898" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">曲线越陡，速度变化越剧烈，看起来就越「快」。每条轨道上的残影按相同的时间间隔取样：挤在一起的地方慢，拉开的地方快。</p>
+  <div class="stage">
+    <div class="ctrls">
+      <button class="o-btn pri" type="button" id="ePlay">播放全部</button>
+      <label class="e-dur">时长<input type="range" id="eDur" min="300" max="2000" step="50" value="900"><output id="eDurOut" for="eDur">900ms</output></label>
+    </div>
+    <div class="e-lab" id="eLab"></div>
+  </div>
+  <div class="stage">
+    <div class="ctrls">
+      <div class="seg" id="eMode" role="group" aria-label="缓动方案"><button type="button" data-v="role" aria-pressed="true">按角色</button><button type="button" data-v="ease" aria-pressed="false">全用默认 ease</button><button type="button" data-v="wrong" aria-pressed="false">用反了</button></div>
+      <div class="seg" id="eSlow" role="group" aria-label="播放速度"><button type="button" data-v="1" aria-pressed="true">1×</button><button type="button" data-v="3" aria-pressed="false">慢放 3×</button></div>
+    </div>
+    <div class="e-roles" id="eRoles" data-mode="role">
+      <div class="o-cell"><h4>入场 Ease-out · 退场 Ease-in</h4>
+        <div class="e-box">
+          <div class="e-toast" id="eToast" role="status"><i><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4L19 7"/></svg></i><span id="eToastTxt">消息已发送</span></div>
+          <button class="o-btn pri" type="button" id="eSend">发送消息</button>
+        </div>
+      </div>
+      <div class="o-cell"><h4>原地换位 · Ease-in-out</h4>
+        <div class="e-box e-tabbox" id="eTabBox">
+          <div class="e-tabs" id="eTabs" role="group" aria-label="筛选"><span class="ind"></span><button type="button" aria-pressed="true">全部</button><button type="button" aria-pressed="false">图片</button><button type="button" aria-pressed="false">视频</button><button type="button" aria-pressed="false">文档</button></div>
+          <div class="e-pages" aria-hidden="true"><div class="e-strip"><div>全部 · 128</div><div>图片 · 64</div><div>视频 · 12</div><div>文档 · 52</div></div></div>
+        </div>
+      </div>
+      <div class="o-cell"><h4>俏皮确认 · Overshoot</h4>
+        <div class="e-box e-pops">
+          <button class="e-like" id="eLike" type="button" aria-pressed="false" aria-label="点赞"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 10c0 5.65-7 10-7 10z"/></svg><span class="e-num"><span id="eLikeN">128</span></span></button>
+          <label class="e-check"><input type="checkbox" id="eCheck"><span class="e-cb"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4L19 7"/></svg></span>完成设计稿</label>
+        </div>
+      </div>
+      <div class="o-cell"><h4>松手归位 · Spring</h4>
+        <div class="e-box e-phone">
+          <div class="e-sheet" id="eSheet"><button class="e-handle" id="eSheetH" type="button" aria-expanded="false" aria-label="展开播放列表"></button><b>播放列表</b>
+            <ul><li>Threads of Light<span>3:55</span></li><li>Concentric<span>2:48</span></li><li>Superellipse<span>4:12</span></li><li>Dither Waves<span>3:06</span></li></ul>
+          </div>
+        </div>
+      </div>
+      <div class="o-cell"><h4>只是在跑 · Linear</h4>
+        <div class="e-box">
+          <div class="e-up" id="eUp"><div class="e-up-h"><span class="e-spin" aria-hidden="true"></span><span id="eUpTxt">design-tokens.zip</span><button class="o-btn" type="button" id="eUpBtn">上传</button></div><div class="e-bar"><i></i></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ul class="specs"><li>小元素 150–250ms 入 · 120–200ms 出</li><li>弹窗 / 抽屉 250–350ms · 全屏 350–500ms</li><li>Spring / Overshoot ≈ 1.5× 时长</li><li>Overshoot 不用在超过 64px 的元素上</li><li>只动画 transform 和 opacity</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 011 动画节奏 ---------- */
+(() => {
+  const css = (el, name) => getComputedStyle(el).getPropertyValue(name).trim();
+
+  // 把 CSS 缓动字符串变成 x→y 的函数，用来画曲线和残影。linear() 只支持不带百分比的等距写法
+  function bezier(x1, y1, x2, y2) {
+    const f = (t, a, b) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
+    return x => { let lo = 0, hi = 1, t = x; for (let k = 0; k < 32; k++) { t = (lo + hi) / 2; if (f(t, x1, x2) < x) lo = t; else hi = t; } return f(t, y1, y2); };
+  }
+  function easingFn(s) {
+    if (s === 'linear') return x => x;
+    if (s === 'ease') return bezier(.25, .1, .25, 1);
+    const n = (s.match(/-?[\d.]+/g) || []).map(Number);
+    if (s.startsWith('cubic-bezier')) return bezier(...n);
+    return x => { const p = x * (n.length - 1), i = Math.min(n.length - 2, Math.floor(p)); return n[i] + (n[i + 1] - n[i]) * (p - i); };
+  }
+
+  /* 曲线实验台 */
+  const lab = $('#eLab'), dur = $('#eDur'), durOut = $('#eDurOut');
+  const ROWS = [
+    ['Linear', '--ease-linear', '进度条、加载、跑马灯：只是在「跑」的东西'],
+    ['Ease-out', '--ease-out', '快进慢停：toast、菜单、弹窗、抽屉入场'],
+    ['Strong ease-out', '--ease-out-strong', '起步更猛、收尾更长：点击后落位的图标、文字、选中胶囊'],
+    ['Ease-in', '--ease-in', '慢起加速、干脆离开：弹窗关闭、toast 消失'],
+    ['Ease-in-out', '--ease-in-out', '原地换位：指示条、轮播翻页、平滑滚动'],
+    ['Overshoot', '--ease-overshoot', '冲过约 10% 再退回：勾选、点赞、角标'],
+    ['Spring', '--ease-spring', '轻晃一两下停稳：抽屉回弹、下拉刷新、排序落位'],
+    ['ease（CSS 默认）', '--ease-default', '不是一种选择：没写缓动时的默认值，全部替换掉'],
+  ];
+  const X = t => 6 + t * 52, Y = v => 54 - v * 40;
+  lab.innerHTML = ROWS.map(([name, tok, use]) => `<div class="e-row${tok === '--ease-default' ? ' bad' : ''}">
+    <div class="e-name"><b>${name}</b><code></code><span>${use}</span></div>
+    <svg class="e-curve" viewBox="0 0 64 64" aria-hidden="true"><path class="ax" d="M6 6V54H58"/><path class="goal" d="M6 14H58"/><path class="c"/><g class="gx"><circle class="gy" cx="6" cy="54" r="2.6"/></g></svg>
+    <button class="e-track" type="button" aria-label="重播 ${name}"><span class="e-run"><span class="start"></span><span class="goal"></span><span class="ghosts"></span><span class="e-mover"><b></b></span></span></button>
+  </div>`).join('');
+  const rows = $$('.e-row', lab).map((el, i) => {
+    const s = css(lab, ROWS[i][1]), f = easingFn(s);
+    $('code', el).textContent = s;
+    $('.c', el).setAttribute('d', Array.from({ length: 65 }, (_, k) => `${k ? 'L' : 'M'}${X(k / 64).toFixed(2)} ${Y(f(k / 64)).toFixed(2)}`).join(''));
+    // 残影：13 个等时间间隔的采样点
+    $('.ghosts', el).innerHTML = Array.from({ length: 13 }, (_, k) => `<i style="--v:${f(k / 12).toFixed(4)}"></i>`).join('');
+    const r = { el, ease: CSS.supports('transition-timing-function', s) ? s : css(lab, '--ease-out-strong'), mover: $('.e-mover', el), gx: $('.gx', el), gy: $('.gy', el) };
+    $('.e-track', el).addEventListener('click', () => play(r));
+    return r;
+  });
+  function play(r) {
+    const o = { duration: +dur.value, fill: 'both' };
+    r.anims?.forEach(a => a.cancel());
+    r.anims = [
+      r.mover.animate({ transform: ['translateX(0)', 'translateX(100%)'] }, { ...o, easing: r.ease }),
+      r.gx.animate({ transform: ['translateX(0)', 'translateX(52px)'] }, { ...o, easing: 'linear' }),
+      r.gy.animate({ transform: ['translateY(0)', 'translateY(-40px)'] }, { ...o, easing: r.ease }),
+    ];
+  }
+  const playAll = () => rows.forEach(play);
+  $('#ePlay').addEventListener('click', playAll);
+  dur.addEventListener('input', () => { durOut.textContent = dur.value + 'ms'; });
+  dur.addEventListener('change', playAll);
+  const io = new IntersectionObserver(es => { if (es[0].isIntersecting) { playAll(); io.disconnect(); } }, { threshold: .4 });
+  io.observe(lab);
+
+  /* 按角色套用 */
+  const roles = $('#eRoles');
+  let slow = 1;
+  const ms = name => parseFloat(css(roles, name)) * slow;
+  seg($('#eMode'), v => { roles.dataset.mode = v; });
+  seg($('#eSlow'), v => { slow = +v; roles.style.setProperty('--slow', v); });
+  const pop = (el, from) => {
+    if (reduceMotion.matches) return;
+    el.animate({ transform: [`scale(${from})`, 'scale(1)'] }, { duration: ms('--duration-sm') * 1.5, easing: css(roles, '--ease-overshoot') });
+  };
+
+  const toast = $('#eToast'), toastTxt = $('#eToastTxt');
+  let sent = 0, toastT = 0;
+  $('#eSend').addEventListener('click', () => {
+    sent++;
+    toastTxt.textContent = sent > 1 ? `已发送 ${sent} 条消息` : '消息已发送';
+    toast.classList.add('in');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => { toast.classList.remove('in'); sent = 0; }, 2200 * slow);
+  });
+
+  const tabBox = $('#eTabBox'), tabBtns = $$('#eTabs button');
+  tabBtns.forEach((b, i) => b.addEventListener('click', () => {
+    tabBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    tabBox.style.setProperty('--i', i);
+  }));
+
+  const like = $('#eLike'), likeN = $('#eLikeN');
+  like.addEventListener('click', () => {
+    const on = like.getAttribute('aria-pressed') !== 'true';
+    like.setAttribute('aria-pressed', String(on));
+    likeN.textContent = 128 + on;
+    pop($('svg', like), .6);
+    if (!reduceMotion.matches) likeN.animate({ transform: [`translateY(${on ? 70 : -70}%)`, 'none'], opacity: [0, 1] }, { duration: ms('--duration-sm') * 1.2, easing: css(roles, '--ease-out-strong') });
+  });
+  $('#eCheck').addEventListener('change', e => { if (e.target.checked) pop($('#eCheck + .e-cb'), .75); });
+
+  const sheet = $('#eSheet'), handle = $('#eSheetH'), CLOSED = 106;
+  let drag = null;
+  const setY = v => sheet.style.setProperty('--y', v + 'px');
+  const settle = open => {
+    sheet.classList.add('settle');
+    setY(open ? 0 : CLOSED);
+    handle.setAttribute('aria-expanded', String(open));
+    handle.setAttribute('aria-label', open ? '收起播放列表' : '展开播放列表');
+  };
+  sheet.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    // 中途接住：先读出动画当前所在的位置再停掉过渡，不跳回起点
+    const y = new DOMMatrix(getComputedStyle(sheet).transform).m42;
+    sheet.classList.remove('settle');
+    setY(y);
+    sheet.setPointerCapture(e.pointerId);
+    drag = { id: e.pointerId, off: e.clientY - y, y0: e.clientY, last: e.clientY, t: e.timeStamp, v: 0, y, onHandle: e.target === handle, moved: false };
+  });
+  sheet.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    let y = e.clientY - drag.off;
+    y = y < 0 ? y / 3 : y > CLOSED ? CLOSED + (y - CLOSED) / 3 : y;  // 越界时加阻尼
+    const dt = e.timeStamp - drag.t;
+    if (dt > 0) drag.v = (e.clientY - drag.last) / dt;
+    drag.last = e.clientY; drag.t = e.timeStamp; drag.y = y;
+    if (Math.abs(e.clientY - drag.y0) > 3) drag.moved = true;
+    setY(y);
+  });
+  const release = e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { y, moved, onHandle } = drag, v = e.timeStamp - drag.t > 80 ? 0 : drag.v;  // 停住再松手不算甩
+    drag = null;
+    // 甩得够快按速度方向走，否则就近；点一下把手则切换
+    if (moved) settle(v < -.3 ? true : v > .3 ? false : y < CLOSED / 2);
+    else settle(onHandle ? handle.getAttribute('aria-expanded') !== 'true' : y < CLOSED / 2);
+  };
+  sheet.addEventListener('pointerup', release);
+  sheet.addEventListener('pointercancel', release);
+  // 指针点击已在 pointerup 里处理，这里只接键盘（detail 为 0）
+  handle.addEventListener('click', e => { if (e.detail === 0) settle(handle.getAttribute('aria-expanded') !== 'true'); });
+
+  const up = $('#eUp'), upBtn = $('#eUpBtn'), upTxt = $('#eUpTxt');
+  upBtn.addEventListener('click', () => {
+    up.classList.remove('run', 'done');
+    void up.offsetWidth;  // 先让进度条回到 0，再开始过渡
+    up.classList.add('run');
+    upBtn.disabled = true;
+    upTxt.textContent = '上传中… design-tokens.zip';
+  });
+  $('.e-bar i', up).addEventListener('transitionend', () => {
+    if (!up.classList.contains('run')) return;
+    up.classList.replace('run', 'done');
+    upBtn.disabled = false;
+    upBtn.textContent = '再传一次';
+    upTxt.textContent = '已上传 design-tokens.zip';
+  });
+})();
+</script>
+</body>
+</html>

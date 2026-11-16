@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>013 · 冲击波光环：扭曲与通道分离</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 013 冲击波光环 ---------- */
+/* 模拟窗口：44px 工具栏 + 页面区（光环只在页面区里，底部两角 12px）。页面用系统字体，快照（SVG foreignObject）里才能和 DOM 一致 */
+.t013-win {
+  --t013-bg: #ffffff; --t013-side: #f7f7f8; --t013-bar: #fbfbfc; --t013-ink: #1b1d22; --t013-mute: #6b717c; --t013-faint: #a2a7b0;
+  --t013-line: rgb(15 23 42 / .09); --t013-card: #ffffff; --t013-soft: #f3f4f6; --t013-on: #eceef1;
+  --t013-ai: #ffffff; --t013-ai-line: rgb(15 23 42 / .09);
+  --t013-ai-shadow: 0 0 0 1px rgb(15 23 42 / .09), 0 2px 4px rgb(15 23 42 / .04), 0 28px 64px -16px rgb(15 23 42 / .22);
+  --t013-metal: linear-gradient(120deg, rgb(238 240 243), rgb(196 202 210) 28%, rgb(241 243 245) 50%, rgb(188 195 204) 74%, rgb(233 236 239));
+  position: relative; height: 540px; margin-top: 18px; border-radius: 12px; overflow: hidden; isolation: isolate;
+  background: var(--t013-bg); color: var(--t013-ink); box-shadow: 0 0 0 1px var(--line), 0 24px 48px -28px rgb(15 23 42 / .3);
+  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.t013-win[data-mode="dark"] {
+  --t013-bg: #141518; --t013-side: #18191c; --t013-bar: #1a1b1f; --t013-ink: #e7e8eb; --t013-mute: #9499a3; --t013-faint: #62666f;
+  --t013-line: rgb(255 255 255 / .08); --t013-card: #1a1b1f; --t013-soft: #202126; --t013-on: #26282d;
+  --t013-ai: rgb(30 30 33); --t013-ai-line: rgb(255 255 255 / .1);
+  --t013-ai-shadow: 0 0 0 1px rgb(255 255 255 / .09), 0 2px 4px rgb(0 0 0 / .3), 0 28px 64px -16px rgb(0 0 0 / .6);
+  --t013-metal: linear-gradient(120deg, rgb(74 79 87), rgb(51 55 61) 28%, rgb(74 79 87) 50%, rgb(51 55 61) 74%, rgb(70 75 83));
+}
+.t013-win, .t013-win * { transition: background-color .3s, color .3s, border-color .3s; }
+.t013-win.t013-snapping, .t013-win.t013-snapping * { transition: none !important; }   /* 拍快照时读终值，不读过渡中间色 */
+.t013-bar { position: relative; z-index: 3; height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 14px; background: var(--t013-bar); border-bottom: 1px solid var(--t013-line); color: var(--t013-mute); font-size: 12.5px; }
+.t013-dots { display: flex; gap: 6px; margin-right: 6px; }
+.t013-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--t013-on); }
+.t013-bar b { color: var(--t013-ink); font-weight: 600; }
+.t013-bar .t013-tools { margin-left: auto; display: flex; gap: 6px; }
+.t013-bar .t013-tools span { height: 26px; padding: 0 10px; display: inline-flex; align-items: center; border-radius: 7px; border: 1px solid var(--t013-line); }
+.t013-body { position: absolute; inset: 44px 0 0; }
+
+/* 页面区：快照的对象。不要用伪元素（快照不复制 ::before/::after） */
+.t013-page { position: absolute; inset: 0; display: grid; grid-template-columns: 184px minmax(0, 1fr); background: var(--t013-bg); overflow: hidden; }
+.t013-side { background: var(--t013-side); border-right: 1px solid var(--t013-line); padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; }
+.t013-ws { display: flex; align-items: center; gap: 8px; padding: 2px 8px 12px; font-weight: 600; }
+.t013-logo { width: 18px; height: 18px; border-radius: 5px; background: var(--t013-ink); }
+.t013-nav { display: flex; flex-direction: column; gap: 1px; }
+.t013-nav span { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 7px; color: var(--t013-mute); }
+.t013-nav span.on { background: var(--t013-on); color: var(--t013-ink); font-weight: 500; }
+.t013-nav i { width: 7px; height: 7px; border-radius: 50%; }
+.t013-sub { padding: 16px 8px 4px; font-size: 11.5px; color: var(--t013-faint); }
+.t013-main { padding: 20px 28px 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.t013-head h3 { margin: 0; font-size: 18px; line-height: 1.3; font-weight: 650; letter-spacing: -.01em; }
+.t013-head p { margin: 2px 0 0; color: var(--t013-mute); font-size: 12.5px; }
+.t013-tabs { display: flex; gap: 4px; }
+.t013-tabs span { padding: 3px 10px; border-radius: 7px; color: var(--t013-mute); font-size: 12.5px; }
+.t013-tabs span.on { background: var(--t013-card); color: var(--t013-ink); border: 1px solid var(--t013-line); padding: 2px 9px; }
+.t013-sum { display: flex; gap: 10px; align-items: baseline; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--t013-line); background: var(--t013-soft); font-size: 12.5px; }
+.t013-sum b { flex: none; font-weight: 600; }
+.t013-sum span { color: var(--t013-mute); }
+.t013-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.t013-list li { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--t013-line); background: var(--t013-card); display: flex; flex-direction: column; gap: 6px; }
+.t013-row { display: flex; align-items: baseline; gap: 10px; }
+.t013-row b { font-weight: 600; }
+.t013-row time { margin-left: auto; color: var(--t013-faint); font-size: 11.5px; white-space: nowrap; }
+.t013-meta { display: flex; align-items: center; gap: 8px; color: var(--t013-mute); font-size: 12px; }
+.t013-stat { display: flex; gap: 16px; padding-top: 6px; border-top: 1px solid var(--t013-line); color: var(--t013-mute); font-size: 12px; }
+.t013-stat b { color: var(--t013-ink); font-weight: 600; }
+.t013-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px; border: 1px solid; font-size: 11.5px; font-weight: 500; }
+.t013-chip[data-s="block"] { color: #d1453b; border-color: rgb(209 69 59 / .35); background: rgb(209 69 59 / .07); }
+.t013-chip[data-s="review"] { color: #b7791f; border-color: rgb(183 121 31 / .35); background: rgb(183 121 31 / .07); }
+.t013-chip[data-s="go"] { color: #2f62e9; border-color: rgb(47 98 233 / .35); background: rgb(47 98 233 / .07); }
+.t013-chip[data-s="ok"] { color: #1f9d55; border-color: rgb(31 157 85 / .35); background: rgb(31 157 85 / .07); }
+.t013-win[data-mode="dark"] .t013-chip[data-s="block"] { color: #ff7b72; }
+.t013-win[data-mode="dark"] .t013-chip[data-s="review"] { color: #e3b341; }
+.t013-win[data-mode="dark"] .t013-chip[data-s="go"] { color: #7d9bff; }
+.t013-win[data-mode="dark"] .t013-chip[data-s="ok"] { color: #56d364; }
+
+/* 光环画布：只在运行时显示；放在页面之上、输入框之下 */
+.t013-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; display: none; }
+
+/* AI 输入框：胶囊 300×44 → 卡片 460×100，底边不动、从中心长开 */
+.t013-dock { position: absolute; left: 184px; right: 0; bottom: 48px; z-index: 2; display: flex; justify-content: center; pointer-events: none; }
+.t013-ai { --t013-a: -60deg; --t013-edge: 0; position: relative; width: 300px; height: 44px; border-radius: 22px; overflow: hidden; pointer-events: auto;
+  background: var(--t013-ai); box-shadow: var(--t013-ai-shadow); transform-origin: 50% 100%; }
+.t013-ai::after { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; opacity: var(--t013-edge);
+  background: conic-gradient(from var(--t013-a), transparent 0 280deg, rgb(255 255 255 / .8) 325deg, transparent 360deg), var(--t013-metal);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.t013-pill { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; padding: 0 14px 0 16px; border: 0; background: none; cursor: text; color: var(--t013-faint); font-size: 14px; text-align: left; }
+.t013-pill:focus-visible { outline: none; }
+.t013-pill svg { width: 16px; height: 16px; flex: none; color: var(--t013-mute); }
+.t013-pill span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t013-pill kbd { font: 500 11.5px/1 var(--mono); color: var(--t013-faint); padding: 4px 6px; border-radius: 5px; border: 1px solid var(--t013-line); }
+.t013-card { position: absolute; left: 50%; bottom: 0; width: var(--t013-cw, 460px); height: 100px; transform: translateX(-50%); display: flex; flex-direction: column; opacity: 0; }
+.t013-card input { height: 47px; flex: none; border: 0; background: none; outline: none; padding: 13px 16px 12px; font-size: 15px; line-height: 22px; color: var(--t013-ink); border-bottom: 1px solid var(--t013-ai-line); }
+.t013-card input::placeholder { color: var(--t013-faint); }
+.t013-tb { height: 52px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; margin-top: -1px; }
+.t013-tb button { height: 32px; min-width: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 16px; background: none; color: var(--t013-mute); cursor: pointer; font-size: 12.5px; padding: 0 8px; }
+.t013-tb button:hover { background: var(--t013-soft); color: var(--t013-ink); }
+.t013-tb button.t013-round { width: 32px; padding: 0; border: 1px solid var(--t013-ai-line); }
+.t013-tb button.t013-go { width: 32px; padding: 0; background: var(--t013-ink); color: var(--t013-ai); }
+.t013-tb svg { width: 16px; height: 16px; }
+.t013-tb hr { width: 1px; height: 16px; border: 0; margin: 0 2px; background: var(--t013-ai-line); }
+.t013-tb .t013-sp { flex: 1; }
+@media (max-width: 640px) {
+  .t013-page { grid-template-columns: minmax(0, 1fr); }
+  .t013-side { display: none; }
+  .t013-dock { left: 0; }
+  .t013-main { padding-inline: 16px; }
+  .t013-bar .t013-tools span:first-child { display: none; }
+}
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="012-chat-bubble.html">← 012</a><a href="014-delete-effects.html">014 →</a></span></nav>
+<section class="tip" id="t013">
+  <div class="tip-h"><span class="no">013</span><h2>冲击波光环：扭曲与通道分离</h2><a class="src" href="https://x.com/Kubai087/status/2119359092334743735" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">点开 AI 输入框，一道光环从输入框背后升起扫过页面，像透镜一样把页面推开几像素，经过的分割线和描边短暂反光。增强版在此基础上加了体积高光和沿弧线流动的虹彩，并改由「回答到达」触发：等待时在原点蓄力，回答到达后波前以内显示新内容。</p>
+  <div class="stage">
+    <div class="ctrls">
+      <div class="seg" id="t013-ver" role="group" aria-label="版本"><button type="button" data-v="orig" aria-pressed="true">原版</button><button type="button" data-v="enh" aria-pressed="false">增强</button></div>
+      <div class="seg" id="t013-pal" role="group" aria-label="配色"><button type="button" data-v="aurora" aria-pressed="true">Aurora</button><button type="button" data-v="halo" aria-pressed="false">Halo</button><button type="button" data-v="frost" aria-pressed="false">Frost</button><button type="button" data-v="spark" aria-pressed="false">Spark</button></div>
+      <div class="seg" id="t013-mode" role="group" aria-label="模式"><button type="button" data-v="light" aria-pressed="true">浅色</button><button type="button" data-v="dark" aria-pressed="false">深色</button></div>
+      <div class="seg" id="t013-speed" role="group" aria-label="速度"><button type="button" data-v="1" aria-pressed="true">1×</button><button type="button" data-v="0.25" aria-pressed="false">¼×</button></div>
+      <button class="o-btn pri" type="button" id="t013-play">播放</button>
+    </div>
+    <div class="t013-win" id="t013-win" data-mode="light">
+      <div class="t013-bar"><span class="t013-dots"><i></i><i></i><i></i></span>项目 / <b>官网改版</b><span class="t013-tools"><span>最近更新</span><span>筛选</span></span></div>
+      <div class="t013-body">
+        <div class="t013-page" id="t013-page">
+          <aside class="t013-side">
+            <div class="t013-ws"><span class="t013-logo"></span>北风工作室</div>
+            <div class="t013-nav"><span>收件箱</span><span>我的任务</span><span class="on">项目</span><span>报表</span><span>自动化</span></div>
+            <div class="t013-sub">项目</div>
+            <div class="t013-nav"><span><i style="background:#7c8cff"></i>官网改版</span><span><i style="background:#3fb950"></i>App 3.0</span><span><i style="background:#f0883e"></i>Q4 招聘</span><span><i style="background:#db61a2"></i>品牌焕新</span></div>
+          </aside>
+          <div class="t013-main">
+            <div class="t013-head"><h3>时间线</h3><p>这个项目里的每一次变更，来自 AI 助手或你的团队。</p></div>
+            <div class="t013-tabs"><span>全部</span><span class="on">设计</span><span>工程</span><span>内容</span></div>
+            <div class="t013-sum"><b>AI 总结</b><span id="t013-sum">首页主视觉卡在素材授权上，定价文案还在等评审，按期上线的概率偏低。</span></div>
+            <ol class="t013-list">
+              <li><div class="t013-row"><b>首页主视觉被卡住</b><time>11月8日 10:40</time></div><div class="t013-meta"><span class="t013-chip" data-s="block" id="t013-c1">阻塞</span>指派给 Leo · AI 助手</div><div class="t013-stat"><span>按期概率 <b id="t013-p1">34%</b></span><span>未完成 <b id="t013-n1">12</b></span></div></li>
+              <li><div class="t013-row"><b>定价文案等待评审</b><time>11月7日 16:15</time></div><div class="t013-meta"><span class="t013-chip" data-s="review" id="t013-c2">待评审</span>请求评审 · 2 位评审人</div><div class="t013-stat"><span>上线风险 <b id="t013-p2">62%</b></span><span>评论 <b>5</b></span></div></li>
+              <li><div class="t013-row"><b>图片 CDN 迁到新区域</b><time>11月6日 09:02</time></div><div class="t013-meta"><span class="t013-chip" data-s="ok">已完成</span>由 AI 助手关闭</div></li>
+            </ol>
+          </div>
+        </div>
+        <canvas class="t013-fx" id="t013-fx" aria-hidden="true"></canvas>
+        <div class="t013-dock">
+          <div class="t013-ai" id="t013-ai">
+            <button class="t013-pill" type="button" id="t013-pill" aria-label="问 AI"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9zM18.5 15l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg><span>问问 AI 这个项目的情况</span><kbd>⌘ I</kbd></button>
+            <form class="t013-card" id="t013-card" inert>
+              <input id="t013-q" placeholder="问问 AI 这个项目的情况" aria-label="问 AI" autocomplete="off">
+              <div class="t013-tb">
+                <button type="button" class="t013-round" aria-label="添加"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+                <hr>
+                <button type="button">模型 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10l5 5 5-5"/></svg></button>
+                <button type="button">提问 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10l5 5 5-5"/></svg></button>
+                <span class="t013-sp"></span>
+                <button type="button" aria-label="语音输入"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+                <button type="submit" class="t013-go" aria-label="发送"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ul class="specs"><li>半径 650 → +800 · 1000ms · 1−2<sup>−9t</sup></li><li>强度 min(1, t/0.03)·(1−t<sup>2.2</sup>)</li><li>色环 w 110 · 浅 0.24 / 深 screen 0.45</li><li>透镜 7px · R/B ×1.08 / ×0.92</li><li>边框 56px · 斜边 60px / 22px</li><li>弹簧 1−e<sup>−8t</sup>cos 6t · 580ms</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 013 冲击波光环 ---------- */
+/* 一张 WebGL2 画布盖在页面区上，从页面快照里一次片元着色画完：透镜、通道分离、色环、边线反光、边缘斜面。
+   快照用 SVG foreignObject（克隆页面并内联计算样式），另拍一张「只有描边和分割线、白线黑底」的图来定位反光。
+   增强版（非原帖）：体积高光 + 沿弧线流动的虹彩 + 文字保护，触发改为「回答到达」：等待时蓄力，波前以内显示新页面。 */
+(() => {
+  const win = $('#t013-win'), page = $('#t013-page'), cv = $('#t013-fx');
+  const shell = $('#t013-ai'), pill = $('#t013-pill'), card = $('#t013-card'), input = $('#t013-q');
+  const PAL = {
+    aurora: { d: [[80,140,255],[160,110,255],[255,110,180],[255,190,140]], l: [[110,150,255],[180,130,255],[255,130,190],[255,180,120]] },
+    halo:   { d: [[255,150,60],[255,190,70],[255,225,120],[255,245,210]],  l: [[255,140,50],[255,175,60],[245,200,80],[255,225,150]] },
+    frost:  { d: [[80,220,175],[70,195,225],[180,240,150],[235,255,245]],  l: [[40,190,150],[50,170,210],[140,210,90],[180,235,215]] },
+    spark:  { d: [[140,100,255],[200,130,255],[255,200,110],[255,235,170]], l: [[130,95,240],[185,125,245],[245,185,80],[250,215,120]] },
+  };
+  const W = 110, R0 = 650, BELOW = 650, CORNER = 12;            // 色环宽、起始半径、圆心在页面底边下方的距离、页面区圆角
+  const HALO_MS = 1000, STILL_MS = 600, DIP_MS = 90, OPEN_MS = 580, EDGE_MS = 900, CLOSE_MS = 320, LEAD_MS = 40, THINK_MS = 1100;
+  const st = { ver: 'orig', pal: 'aurora', speed: 1, dark: false, darkF: 0, open: false, p: 0, busy: false, step: 0 };
+  let vnow = 0, last = 0, raf = 0;                               // vnow：按「慢放」缩放过的虚拟时钟（ms）
+  let morph = null, haloAt = -1, halo = null, gather = null;
+
+  /* ---- 快照 ---- */
+  const LINE_CSS = 'color:transparent;-webkit-text-fill-color:transparent;text-decoration-color:transparent;background:none;background-color:transparent;box-shadow:none;text-shadow:none;outline:none;border-color:#fff;';
+  function styleOf(el) {
+    const cs = getComputedStyle(el); let s = '';
+    for (let i = 0; i < cs.length; i++) s += `${cs[i]}:${cs.getPropertyValue(cs[i])};`;
+    return s + 'transition:none;animation:none;';
+  }
+  async function raster(root, w, h, k) {
+    root.style.position = 'relative'; root.style.inset = 'auto'; root.style.margin = '0';
+    const xml = new XMLSerializer().serializeToString(root);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w * k}" height="${h * k}" viewBox="0 0 ${w} ${h}"><foreignObject x="0" y="0" width="${w}" height="${h}">${xml}</foreignObject></svg>`;
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    await img.decode();
+    const c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  }
+  async function capture() {
+    const w = page.clientWidth, h = page.clientHeight, k = Math.min(devicePixelRatio || 1, 2);
+    win.classList.add('t013-snapping');
+    const src = [page, ...page.querySelectorAll('*')], styles = src.map(styleOf);
+    win.classList.remove('t013-snapping');
+    const clone = lines => {
+      const root = page.cloneNode(true);
+      [root, ...root.querySelectorAll('*')].forEach((el, i) => {
+        let s = styles[i];
+        if (lines) s += /^(svg|img|canvas|video)$/i.test(el.tagName) ? 'visibility:hidden;' : LINE_CSS;
+        el.setAttribute('style', s); el.removeAttribute('id');
+      });
+      if (lines) root.style.background = '#000';
+      return root;
+    };
+    const [pg, ln] = await Promise.all([raster(clone(false), w, h, k), raster(clone(true), w, h, k)]);
+    return { pg, ln };
+  }
+  const snap = { valid: false, ready: false, job: null, failed: false, themeAt: -1e9 };
+  new MutationObserver(() => { snap.valid = false; }).observe(page, { subtree: true, childList: true, attributes: true, characterData: true });
+  new ResizeObserver(() => { snap.valid = false; }).observe(page);
+  async function ensureSnap() {
+    if (snap.valid || snap.failed) return;
+    if (!snap.job) snap.job = (async () => {
+      const wait = 320 - (performance.now() - snap.themeAt);     // 主题切换的 300ms 过渡结束后再拍，否则拍到中间色
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      try { const c = await capture(); if (glReady()) { upload(0, c.pg); upload(1, c.ln); snap.ready = true; } snap.valid = true; }
+      catch (e) { snap.failed = true; }                          // foreignObject 被判跨源或解码失败：退回只叠色环
+    })().finally(() => { snap.job = null; });
+    await snap.job;
+  }
+
+  /* ---- WebGL ---- */
+  const VS = `#version 300 es
+void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2. - 1., 0., 1.); }`;
+  const FS = `#version 300 es
+precision highp float;
+uniform vec2 uSize; uniform float uDpr;
+uniform vec2 uC; uniform float uR, uS, uW, uDark, uCorner, uTime;
+uniform vec3 uPL[4]; uniform vec3 uPD[4];
+uniform sampler2D uOld, uOldL, uNew, uNewL;
+uniform float uHasTex, uReveal, uBend, uSplit, uGlint, uBevel, uEnh, uGather;
+out vec4 oc;
+vec3 ringAt(float x){
+  vec3 c = vec3(0.); float ws = 0.;
+  for (int i = 0; i < 4; i++) { float d = (x - (float(i) - 1.5)) / .8; float k = exp(-d * d); c += k * mix(uPL[i], uPD[i], uDark); ws += k; }
+  return c / ws;
+}
+vec3 samp(sampler2D t, vec2 p){ return texture(t, clamp(p, vec2(.5), uSize - .5) / uSize).rgb; }
+void main(){
+  vec2 p = vec2(gl_FragCoord.x, uSize.y * uDpr - gl_FragCoord.y) / uDpr;
+  vec2 dv = p - uC; float dist = length(dv); vec2 dir = dv / max(dist, 1e-3);
+  float x = (dist - uR) / uW;
+  float a = uS * exp(-1.1 * x * x * .25);
+  // 到左右、底边的距离（底部两角按圆角算）；顶边贴着工具栏，单独算
+  float dl = p.x, dr = uSize.x - p.x, db = uSize.y - p.y;
+  float dSide = min(min(dl, dr), db);
+  vec2 q = vec2(uCorner - min(dl, dr), uCorner - db);
+  if (q.x > 0. && q.y > 0.) dSide = uCorner - length(q);
+  float frame = smoothstep(0., 56., min(dSide, p.y));
+  // 透镜：整个光环是一块透镜，外侧拉伸、内侧压缩；蓄力时原点附近往里收
+  float z = x * .75, ez = exp(-z * z);
+  float g = (dist - uR) / 160.;
+  float push = 7. * 2.33 * z * ez * uS - 2.5 * uGather * exp(-g * g);
+  vec2 lens = dir * push * frame * uBend;
+  // 增强：高度场 h = exp(-z²) 的法线，光从上方来
+  float tilt = 0., xs = x;
+  if (uEnh > .5) {
+    vec2 n = -dir * (-1.5 * z * ez) * .9 * uS;
+    tilt = clamp(dot(n, vec2(0., -1.)) / .5, -1., 1.);
+    xs = x + .45 * sin(3. * atan(dir.x, -dir.y) + 2.4 * uTime) + .6 * tilt;
+  }
+  vec3 rc = ringAt(xs);
+  if (uHasTex < .5) {                       // 没有快照：只画色环（深色时画布用 screen 混合）
+    float ao = a * mix(.24, .45, uDark);
+    oc = uDark > .5 ? vec4(rc * ao, 1.) : vec4(rc * ao, ao);
+    return;
+  }
+  // 边缘斜面：左右和底边 60px 内从更里面取样，内容向边缘拉伸
+  vec2 kk = max(1. - vec2(dl, dr) / 60., 0.); float kb = max(1. - db / 60., 0.);
+  vec2 bev = 22. * a * uBevel * vec2(kk.x * kk.x - kk.y * kk.y, -kb * kb);
+  vec2 base = p + bev;
+  float sr = uSplit > .5 ? 1.08 : 1., sb = uSplit > .5 ? .92 : 1.;
+  vec2 pr = base - lens * sr, pg = base - lens, pb = base - lens * sb;
+  vec3 pageC = vec3(samp(uOld, pr).r, samp(uOld, pg).g, samp(uOld, pb).b);
+  float ln = samp(uOldL, pg).r;
+  float m = uReveal * (1. - smoothstep(-.6, .6, x));
+  if (m > 0.) {
+    pageC = mix(pageC, vec3(samp(uNew, pr).r, samp(uNew, pg).g, samp(uNew, pb).b), m);
+    ln = mix(ln, samp(uNewL, pg).r, m);
+  }
+  float lum = dot(pageC, vec3(.2126, .7152, .0722));
+  float kL = uEnh > .5 ? .32 * mix(.45, 1., lum) * (1. + .5 * tilt) : .24;
+  float kD = uEnh > .5 ? .52 * (1. + .5 * tilt) : .45;
+  float al = a * kL, ad = a * kD;
+  vec3 cl = mix(pageC, rc, al) + rc * al * .2;
+  vec3 cd = 1. - (1. - pageC) * (1. - rc * ad);
+  if (uEnh > .5) {
+    float hl = pow(max(tilt, 0.), 3.) * uS;
+    cl = mix(cl, rc, hl * .22);
+    cd = 1. - (1. - cd) * (1. - mix(rc, vec3(1.), .55) * hl * .28);
+  }
+  vec3 col = mix(cl, cd, uDark);
+  float ga = uS * exp(-1.4 * x * x * .25) * mix(.3, .14, uDark) * uGlint;
+  col = mix(col, mix(rc, vec3(1.), .2), clamp(ln * ga, 0., 1.));
+  float el = exp(-max(dSide, 0.) / 7.) * a * uBevel;
+  col = mix(col, mix(rc, vec3(1.), .45), clamp(el, 0., 1.) * .7);
+  oc = vec4(col, 1.);
+}`;
+  let gl = null, U = {}, tex = [], glTried = false;
+  function glReady() {
+    if (glTried) return !!gl;
+    glTried = true;
+    const c = cv.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false });
+    if (!c) return false;
+    const sh = (type, src) => { const s = c.createShader(type); c.shaderSource(s, src); c.compileShader(s); if (!c.getShaderParameter(s, c.COMPILE_STATUS)) throw new Error(c.getShaderInfoLog(s)); return s; };
+    const pr = c.createProgram();
+    c.attachShader(pr, sh(c.VERTEX_SHADER, VS)); c.attachShader(pr, sh(c.FRAGMENT_SHADER, FS)); c.linkProgram(pr); c.useProgram(pr);
+    ['uSize','uDpr','uC','uR','uS','uW','uDark','uCorner','uTime','uPL','uPD','uOld','uOldL','uNew','uNewL','uHasTex','uReveal','uBend','uSplit','uGlint','uBevel','uEnh','uGather']
+      .forEach(n => { U[n] = c.getUniformLocation(pr, n); });
+    for (let i = 0; i < 4; i++) {
+      const t = c.createTexture(); c.activeTexture(c.TEXTURE0 + i); c.bindTexture(c.TEXTURE_2D, t);
+      c.texImage2D(c.TEXTURE_2D, 0, c.RGBA, 1, 1, 0, c.RGBA, c.UNSIGNED_BYTE, new Uint8Array(4));
+      [c.TEXTURE_MIN_FILTER, c.TEXTURE_MAG_FILTER].forEach(p => c.texParameteri(c.TEXTURE_2D, p, c.LINEAR));
+      [c.TEXTURE_WRAP_S, c.TEXTURE_WRAP_T].forEach(p => c.texParameteri(c.TEXTURE_2D, p, c.CLAMP_TO_EDGE));
+      tex.push(t);
+    }
+    gl = c;
+    return true;
+  }
+  function upload(unit, source) {
+    gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex[unit]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  }
+  function promoteNew() {                                         // 揭示结束：新页面成为下一次的旧页面
+    [tex[0], tex[2]] = [tex[2], tex[0]]; [tex[1], tex[3]] = [tex[3], tex[1]];
+  }
+  const flat = key => PAL[st.pal][key].flat().map(v => v / 255);
+
+  function geometry() {
+    const pr = page.getBoundingClientRect(), sr = shell.getBoundingClientRect();
+    const w = pr.width, h = pr.height, cx = sr.left + sr.width / 2 - pr.left, cy = h + BELOW;
+    const far = Math.max(Math.hypot(cx, cy), Math.hypot(w - cx, cy));
+    return { w, h, cx, cy, grow: far - R0 + .8 * W };            // 收尾时波心正好越过最远的角，揭示能完整盖住
+  }
+  const GATHER_R = R0 + 50;
+  const radiusAt = (t, G, from = R0) => from + (R0 + G - from) * (1 - 2 ** (-9 * t)) / (1 - 2 ** -9);
+  const strengthAt = t => Math.min(1, t / .03) * (1 - t ** 2.2);
+
+  function draw() {
+    const gm = geometry(), k = Math.min(devicePixelRatio || 1, 2);
+    const pw = Math.round(gm.w * k), ph = Math.round(gm.h * k);
+    if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+    gl.viewport(0, 0, pw, ph);
+    const still = reduceMotion.matches;
+    let r = GATHER_R, s = 0, gs = 0, reveal = 0;                    // 蓄力：光环中线停在页面底边上方 50px，从输入框两侧透出来
+    if (gather) {
+      const tg = vnow - gather.t0;
+      gs = .42 * clamp(tg / 350) * (.85 + .15 * Math.sin(tg / 1100 * Math.PI * 2));
+      if (gather.rel != null) gs *= Math.exp(-(vnow - gather.rel) / 120);
+    }
+    if (halo) {
+      const t = clamp((vnow - halo.t0) / (still ? STILL_MS : HALO_MS));
+      r = still ? R0 + gm.grow * .3 : radiusAt(t, gm.grow, halo.from);
+      s = still ? .5 * Math.sin(Math.PI * t) : strengthAt(t);
+      reveal = halo.reveal && !still ? 1 : 0;
+    }
+    const enh = st.ver === 'enh' && !still;
+    gl.uniform2f(U.uSize, gm.w, gm.h); gl.uniform1f(U.uDpr, pw / gm.w);
+    gl.uniform2f(U.uC, gm.cx, gm.cy); gl.uniform1f(U.uR, r); gl.uniform1f(U.uS, Math.max(s, gs)); gl.uniform1f(U.uW, W);
+    gl.uniform1f(U.uDark, st.darkF); gl.uniform1f(U.uCorner, CORNER); gl.uniform1f(U.uTime, vnow / 1000);
+    gl.uniform3fv(U.uPL, flat('l')); gl.uniform3fv(U.uPD, flat('d'));
+    [U.uOld, U.uOldL, U.uNew, U.uNewL].forEach((u, i) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, tex[i]); gl.uniform1i(u, i); });
+    const hasTex = snap.ready && !snap.failed;              // 运行中页面变了也继续用手上这张，不中途切到无快照模式
+    gl.uniform1f(U.uHasTex, hasTex ? 1 : 0); gl.uniform1f(U.uReveal, reveal);
+    gl.uniform1f(U.uBend, still ? 0 : 1); gl.uniform1f(U.uSplit, still ? 0 : 1); gl.uniform1f(U.uGlint, still ? 0 : 1);
+    gl.uniform1f(U.uBevel, still ? 0 : 1); gl.uniform1f(U.uEnh, enh ? 1 : 0); gl.uniform1f(U.uGather, gs / .42);
+    cv.style.mixBlendMode = !hasTex && st.dark ? 'screen' : '';
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  /* ---- 输入框 ---- */
+  const easeOut = t => 1 - (1 - t) ** 3;
+  const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+  const springP = s => 1 - Math.exp(-8 * s) * Math.cos(6 * s);     // s 以秒计，580ms 时略过终点再收回
+  function cardWidth() { return Math.min(460, shell.parentElement.clientWidth - 32); }
+  function applyMorph(p, scale) {
+    const cw = cardWidth();
+    shell.style.width = 300 + (cw - 300) * p + 'px';
+    shell.style.height = 44 + 56 * p + 'px';
+    shell.style.borderRadius = 22 - 6 * p + 'px';
+    shell.style.transform = scale === 1 ? '' : `scale(${scale})`;
+    card.style.setProperty('--t013-cw', cw + 'px');
+    card.style.opacity = clamp((p - .3) / .7);
+    pill.style.opacity = 1 - clamp(p / .3);
+  }
+  function setOpen(open) {
+    st.open = open;
+    card.inert = !open; pill.inert = open;
+  }
+  function openAI(fire) {
+    if (st.open) { if (fire) startHaloSoon(0); return; }
+    setOpen(true); input.focus({ preventScroll: true });
+    if (reduceMotion.matches) { morph = null; applyMorph(1, 1); shell.style.setProperty('--t013-edge', 0); }
+    else { morph = { kind: 'open', t0: vnow }; }
+    if (fire) startHaloSoon(reduceMotion.matches ? 0 : DIP_MS + LEAD_MS);
+    kick();
+  }
+  function closeAI() {
+    if (!st.open) return;
+    const hadFocus = shell.contains(document.activeElement);
+    setOpen(false);
+    if (reduceMotion.matches) { morph = null; applyMorph(0, 1); }
+    else morph = { kind: 'close', t0: vnow, from: st.p };
+    if (hadFocus) pill.focus({ preventScroll: true });
+    kick();
+  }
+  function stepMorph() {
+    if (!morph) return;
+    const tt = vnow - morph.t0;
+    let p, scale = 1, edge = 0, ang = -60;
+    if (morph.kind === 'open') {
+      if (tt < DIP_MS) { p = 0; scale = 1 - .03 * easeOut(tt / DIP_MS); }
+      else {
+        const to = tt - DIP_MS;
+        p = to >= OPEN_MS ? 1 : springP(to / 1000);
+        scale = .97 + .03 * Math.min(p, 1);
+        const te = clamp(to / EDGE_MS);
+        ang = -60 + 360 * easeOut(te); edge = .75 * Math.sin(Math.PI * te);
+        if (to >= EDGE_MS) morph = null;
+      }
+    } else {
+      const t = clamp(tt / CLOSE_MS);
+      p = morph.from * (1 - easeInOut(t));
+      if (t >= 1) morph = null;
+    }
+    st.p = p;
+    shell.style.setProperty('--t013-a', ang + 'deg'); shell.style.setProperty('--t013-edge', edge);
+    applyMorph(p, scale);
+  }
+
+  /* ---- 触发 ---- */
+  function startHaloSoon(delay) { haloAt = vnow + delay; kick(); }
+  async function fireHalo() {
+    if (!glReady()) return;
+    await ensureSnap();
+    halo = { t0: vnow, reveal: false }; cv.style.display = 'block'; kick();   // 再次触发：重新开始
+  }
+  const nextState = () => [
+    { sum: '首页主视觉卡在素材授权上，定价文案还在等评审，按期上线的概率偏低。', c1: ['block', '阻塞'], c2: ['review', '待评审'], p1: '34%', n1: '12', p2: '62%' },
+    { sum: '已把主视觉拆成两张卡并换用自有素材，定价文案评审通过，按期上线概率升到 81%。', c1: ['go', '进行中'], c2: ['ok', '已通过'], p1: '81%', n1: '9', p2: '30%' },
+  ][st.step = 1 - st.step];
+  function applyState(s) {
+    $('#t013-sum').textContent = s.sum;
+    [['#t013-c1', s.c1], ['#t013-c2', s.c2]].forEach(([id, [k, t]]) => { const el = $(id); el.dataset.s = k; el.textContent = t; });
+    $('#t013-p1').textContent = s.p1; $('#t013-n1').textContent = s.n1; $('#t013-p2').textContent = s.p2;
+  }
+  const vwait = ms => new Promise(r => setTimeout(r, ms / st.speed));
+  async function send() {
+    input.value = '';
+    if (st.ver === 'orig' || st.busy) { if (st.ver === 'orig') applyState(nextState()); return; }
+    st.busy = true;
+    const fancy = glReady() && !reduceMotion.matches;
+    if (fancy) { await ensureSnap(); }
+    const ok = fancy && snap.ready && !snap.failed;
+    if (ok) { gather = { t0: vnow }; cv.style.display = 'block'; kick(); }
+    await vwait(THINK_MS);                                        // 模拟等待回答；请求失败时只把蓄力淡掉，不放光环
+    applyState(nextState());
+    if (ok) {
+      try {
+        const c = await capture(); upload(2, c.pg); upload(3, c.ln);
+        gather.rel = vnow; halo = { t0: vnow, reveal: true, from: GATHER_R }; kick();   // 从蓄力的位置接着出发，不往回跳
+        return;                                                   // busy 在光环结束时解除
+      } catch (e) { snap.failed = true; gather = null; }
+    }
+    if (glReady()) { await ensureSnap(); halo = { t0: vnow, reveal: false }; cv.style.display = 'block'; kick(); }
+    st.busy = false;
+  }
+
+  /* ---- 帧循环：只在有东西在动时运行 ---- */
+  function kick() { if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); } }
+  function tick(ts) {
+    const dt = ts - last; last = ts; vnow += dt * st.speed;
+    const target = st.dark ? 1 : 0;
+    if (st.darkF !== target) st.darkF = clamp(st.darkF + Math.sign(target - st.darkF) * dt / 300);   // 深浅切换时光环颜色跟页面一起 300ms 交叉淡化
+    stepMorph();
+    if (haloAt >= 0 && vnow >= haloAt) { haloAt = -1; fireHalo(); }
+    if (halo) {
+      const dur = reduceMotion.matches ? STILL_MS : HALO_MS;
+      if (vnow - halo.t0 >= dur) {
+        if (halo.reveal) { promoteNew(); snap.valid = true; st.busy = false; }
+        halo = null; gather = null; cv.style.display = 'none';
+      }
+    }
+    if (gather && !halo && cv.style.display === 'none') cv.style.display = 'block';
+    if ((halo || gather) && gl) draw();
+    raf = (morph || halo || gather || haloAt >= 0 || st.darkF !== (st.dark ? 1 : 0)) ? requestAnimationFrame(tick) : 0;
+  }
+
+  /* ---- 交互 ---- */
+  pill.addEventListener('click', () => openAI(st.ver === 'orig'));
+  card.addEventListener('submit', e => { e.preventDefault(); send(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') closeAI(); });
+  document.addEventListener('pointerdown', e => { if (st.open && !shell.contains(e.target) && !(e.target instanceof Element && e.target.closest('#t013 .ctrls'))) closeAI(); });
+  document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i') {
+      const r = win.getBoundingClientRect();
+      if (r.bottom > 0 && r.top < innerHeight) { e.preventDefault(); openAI(st.ver === 'orig'); }
+    }
+  });
+  $('#t013-play').addEventListener('click', () => {
+    if (st.ver === 'orig') { if (st.open) { setOpen(false); morph = null; applyMorph(0, 1); } openAI(true); }
+    else { if (!st.open) openAI(false); input.value = '总结一下这个项目现在的风险'; send(); }
+  });
+  seg($('#t013-ver'), v => { st.ver = v; });
+  seg($('#t013-pal'), v => { st.pal = v; });
+  seg($('#t013-speed'), v => { st.speed = +v; });
+  const setMode = (dark, instant) => {
+    st.dark = dark; win.dataset.mode = dark ? 'dark' : 'light'; snap.valid = false; snap.themeAt = performance.now();
+    if (instant) st.darkF = dark ? 1 : 0;
+    if (halo && !halo.reveal) ensureSnap();                        // 运行中切换：过渡结束后换上新主题的快照
+    $$('#t013-mode button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.v === 'dark') === dark)));
+    kick();
+  };
+  seg($('#t013-mode'), v => setMode(v === 'dark'));
+  setMode(isDarkTheme(), true);
+  onThemeChange(() => setMode(isDarkTheme()));
+  addEventListener('resize', () => { if (!st.open && !morph) applyMorph(0, 1); else if (st.open && !morph) applyMorph(1, 1); });
+  // 区块进入视口后在空闲时预拍一张快照，点击时光环能按时出发
+  new IntersectionObserver(es => {
+    if (es[0].isIntersecting && !snap.valid) (window.requestIdleCallback || setTimeout)(() => { if (glReady()) ensureSnap(); });
+  }, { threshold: .2 }).observe(win);
+})();
+</script>
+</body>
+</html>

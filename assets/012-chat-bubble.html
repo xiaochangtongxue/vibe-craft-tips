@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>012 · 消息气泡的材质与动效</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 012 消息气泡 ---------- */
+/* 按原帖数值做在 1080×930 的逻辑画布上，再按容器宽度整体缩放；气泡位置、缩放、模糊由 JS 每帧写入 */
+.t012-fit { position: relative; max-width: 864px; margin: 18px auto 0; height: calc(930px * var(--k, .8)); }
+.t012-app {
+  --ease-out: cubic-bezier(0, 0, .58, 1); --ease-strong: cubic-bezier(.22, 1, .36, 1);
+  --t012-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --t012-grad: linear-gradient(180deg, rgb(11 127 134) 0%, rgb(13 148 136) 28%, rgb(16 163 127) 60%, rgb(31 191 143) 100%);
+  --t012-th: 786px;
+  position: absolute; left: 0; top: 0; width: 1080px; height: 930px; overflow: hidden; border-radius: 40px;
+  transform: scale(var(--k, .8)); transform-origin: 0 0; box-shadow: 0 0 0 2px var(--line);
+  font-family: Inter, var(--font); -webkit-font-smoothing: antialiased;
+}
+.t012-sky { position: absolute; left: -100px; top: 0; width: 1280px; height: 930px; display: none; animation: t012-sway 40s ease-in-out infinite alternate; }
+@keyframes t012-sway { from { transform: translateX(-100px); } to { transform: translateX(100px); } }
+.t012-px { position: absolute; inset: 0; width: 1080px; height: 930px; display: none; image-rendering: pixelated; pointer-events: none; }
+.t012-thread { position: absolute; inset: 0; z-index: 1; }
+.t012-dots { position: absolute; left: 48px; top: 0; z-index: 1; width: 48px; height: 48px; pointer-events: none; opacity: 0; }
+
+/* 1. 气泡盒子：所有材质相同 */
+.t012-b { position: absolute; top: 0; max-width: 680px; padding: 17px 26px; border: 2px solid transparent; border-radius: 38px;
+  font-size: 28px; line-height: 38px; letter-spacing: -.01em; overflow-wrap: anywhere; cursor: default; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  background-origin: border-box; transition: border-radius 200ms var(--ease-out); }
+.t012-b.me { right: 48px; }
+.t012-b.them { left: 48px; }
+.t012-b:focus-visible { outline: 4px solid var(--accent); outline-offset: 6px; }
+.t012-tx { position: relative; z-index: 1; }
+.t012-w { display: inline-block; white-space: pre-wrap; }
+/* 组内相接处收角：Aqua、拟物、Cirrus */
+.t012-app:is([data-m="cirrus"], [data-m="aqua"], [data-m="skeuo"]) .t012-b.me:is(.first, .middle) { border-bottom-right-radius: 10px; }
+.t012-app:is([data-m="cirrus"], [data-m="aqua"], [data-m="skeuo"]) .t012-b.me:is(.middle, .last) { border-top-right-radius: 10px; }
+.t012-app:is([data-m="cirrus"], [data-m="aqua"], [data-m="skeuo"]) .t012-b.them:is(.first, .middle) { border-bottom-left-radius: 10px; }
+.t012-app:is([data-m="cirrus"], [data-m="aqua"], [data-m="skeuo"]) .t012-b.them:is(.middle, .last) { border-top-left-radius: 10px; }
+/* 尾巴：纯色、渐变只给组内最后一个；色块伸出 12px，页面底色的挖口把它切成一个卷 */
+.t012-app:is([data-m="solid"], [data-m="gradient"]) .t012-b::before,
+.t012-app:is([data-m="solid"], [data-m="gradient"]) .t012-b::after { content: ""; position: absolute; bottom: -2px; z-index: -1; opacity: 0; transition: opacity 160ms var(--ease-out); pointer-events: none; }
+.t012-app:is([data-m="solid"], [data-m="gradient"]) .t012-b:is(.last, .single)::before,
+.t012-app:is([data-m="solid"], [data-m="gradient"]) .t012-b:is(.last, .single)::after { opacity: 1; }
+.t012-app:is([data-m="solid"], [data-m="gradient"]) .t012-b.me::before { right: -14px; width: 64px; height: 38px; background: var(--t012-face); border-bottom-left-radius: 18px 14px; border-bottom-right-radius: 3px; }
+.t012-app:is([data-m="solid"], [data-m="gradient"]) .t012-b.me::after { right: -34px; width: 32px; height: 42px; background: var(--t012-page); border-bottom-left-radius: 20px 24px; }
+.t012-app:is([data-m="solid"], [data-m="gradient"]) .t012-b.them::before { left: -14px; width: 64px; height: 38px; background: var(--t012-face); border-bottom-right-radius: 18px 14px; border-bottom-left-radius: 3px; }
+.t012-app:is([data-m="solid"], [data-m="gradient"]) .t012-b.them::after { left: -34px; width: 32px; height: 42px; background: var(--t012-page); border-bottom-right-radius: 20px 24px; }
+
+/* 输入区与菜单的公共骨架（重做 demo 才有，各材质下面再换皮） */
+.t012-composer { position: absolute; left: 48px; right: 48px; bottom: 40px; z-index: 2; display: flex; gap: 16px; height: 80px; margin: 0; }
+.t012-composer input { flex: 1; min-width: 0; height: 80px; padding: 0 30px; border: 2px solid transparent; border-radius: 40px; font: inherit; font-size: 28px; letter-spacing: -.01em; outline: none; }
+.t012-composer input:focus-visible { outline: 4px solid var(--accent); outline-offset: 4px; }
+.t012-send { flex: none; width: 80px; height: 80px; display: grid; place-items: center; padding: 0; border: 2px solid transparent; border-radius: 50%; color: #fff; cursor: pointer; }
+.t012-send svg { width: 34px; height: 34px; }
+.t012-menu { position: absolute; top: 0; z-index: 3; width: 300px; padding: 8px; border-radius: 26px; display: flex; flex-direction: column; }
+.t012-menu button { height: 60px; padding: 0 20px; border: 0; border-radius: 18px; background: transparent; color: inherit; font: inherit; font-size: 26px; font-weight: 500; text-align: left; cursor: pointer; }
+.t012-menu button:hover, .t012-menu button:focus-visible { background: var(--t012-hover); outline: none; }
+.t012-menu .del { color: var(--t012-del); }
+
+/* 2. 六种材质 */
+.t012-app[data-m="cirrus"] { background: linear-gradient(rgb(38 115 230), rgb(168 209 247)); }  /* WebGL 天空出图前的底色 */
+.t012-app[data-m="cirrus"] .t012-sky { display: block; }
+.t012-app[data-m="cirrus"] .t012-b { border-color: transparent; background: none; box-shadow: none; color: rgb(255 255 255);
+  -webkit-backdrop-filter: blur(26px) saturate(130%); backdrop-filter: blur(26px) saturate(130%); }
+.t012-app[data-m="cirrus"] .t012-b::before { content: ""; position: absolute; inset: -2px; border-radius: inherit; background: var(--t012-grain), var(--tint); opacity: var(--t012-tint-o, 1); }
+.t012-app[data-m="cirrus"] .t012-b.me { --tint: rgb(46 128 232 / .34); }
+.t012-app[data-m="cirrus"] .t012-b.them { --tint: rgb(104 134 168 / .34); }
+.t012-app[data-m="cirrus"] .t012-composer input { color: #fff; background: var(--t012-grain), rgb(104 134 168 / .34); -webkit-backdrop-filter: blur(26px) saturate(130%); backdrop-filter: blur(26px) saturate(130%); }
+.t012-app[data-m="cirrus"] .t012-composer input::placeholder { color: rgb(255 255 255 / .72); }
+.t012-app[data-m="cirrus"] .t012-send { background: var(--t012-grain), rgb(46 128 232 / .5); -webkit-backdrop-filter: blur(26px) saturate(130%); backdrop-filter: blur(26px) saturate(130%); }
+.t012-app[data-m="cirrus"] .t012-menu { color: #fff; background: var(--t012-grain), rgb(70 98 134 / .52); -webkit-backdrop-filter: blur(36px) saturate(130%); backdrop-filter: blur(36px) saturate(130%); --t012-del: rgb(255 138 126); --t012-hover: rgb(255 255 255 / .14); }
+
+.t012-app[data-m="pixel"] { background-color: rgb(27 30 52); background-size: 4px 4px;
+  background-image: linear-gradient(rgb(255 255 255 / .035) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / .035) 1px, transparent 1px); }
+.t012-app[data-m="pixel"] .t012-px { display: block; }
+.t012-app[data-m="pixel"] .t012-b { background: none; border-color: transparent; box-shadow: none; transition: none; font-family: "Pixelify Sans", var(--font); letter-spacing: .02em; }
+.t012-app[data-m="pixel"] .t012-b.me { color: rgb(255 255 255); text-shadow: 0 4px 0 rgb(14 15 34 / .35); }
+.t012-app[data-m="pixel"] .t012-b.them { color: rgb(14 15 34); }
+.t012-app[data-m="pixel"] .t012-tx { opacity: var(--t012-txo, 1); }
+.t012-app[data-m="pixel"] :is(.t012-composer input, .t012-send, .t012-menu, .t012-menu button) { border-radius: 0; }
+.t012-app[data-m="pixel"] :is(.t012-composer input, .t012-menu) { font-family: "Pixelify Sans", var(--font); color: rgb(14 15 34); background: rgb(244 243 236);
+  box-shadow: 0 -4px 0 rgb(14 15 34), 0 4px 0 rgb(14 15 34), -4px 0 0 rgb(14 15 34), 4px 0 0 rgb(14 15 34); }
+.t012-app[data-m="pixel"] .t012-send { background: rgb(93 112 232); box-shadow: 0 -4px 0 rgb(14 15 34), 0 4px 0 rgb(14 15 34), -4px 0 0 rgb(14 15 34), 4px 0 0 rgb(14 15 34); }
+.t012-app[data-m="pixel"] .t012-menu { --t012-del: rgb(200 52 52); --t012-hover: rgb(226 224 212); }
+
+.t012-app[data-m="aqua"] { background: repeating-linear-gradient(180deg, rgb(246 246 246) 0 3px, rgb(233 233 233) 3px 6px); }
+.t012-app[data-m="aqua"] .t012-b { border-color: var(--edge); background: var(--face);
+  box-shadow: inset 0 -14px 18px -8px var(--glow), inset 0 2px 2px rgb(255 255 255 / .5), 0 4px 8px -2px rgb(0 30 80 / .32);
+  font-family: "Lucida Grande", var(--font); letter-spacing: -.01em; }
+.t012-app[data-m="aqua"] .t012-b.me, .t012-app[data-m="aqua"] .t012-send { --face: linear-gradient(180deg, rgb(116 188 255) 0%, rgb(58 146 242) 48%, rgb(28 111 220) 54%, rgb(43 132 236) 78%, rgb(138 210 255) 100%);
+  --edge: rgb(21 80 160); --glow: rgb(160 228 255 / .95); color: rgb(255 255 255); text-shadow: 0 -1px 1px rgb(0 40 110 / .45); }
+.t012-app[data-m="aqua"] .t012-b.them { --face: linear-gradient(180deg, rgb(253 253 254) 0%, rgb(236 238 241) 48%, rgb(220 223 228) 54%, rgb(228 231 235) 78%, rgb(251 252 253) 100%);
+  --edge: rgb(141 148 159); --glow: rgb(255 255 255 / .95); color: rgb(29 29 31); text-shadow: 0 1px 0 rgb(255 255 255 / .7); }
+.t012-app[data-m="aqua"] .t012-b::before { content: ""; position: absolute; top: 3px; left: 16px; right: 16px; height: min(46%, 36px);
+  border-radius: 30px 30px 18px 18px; background: linear-gradient(180deg, rgb(255 255 255 / .92), rgb(255 255 255 / .12)); }
+.t012-app[data-m="aqua"] .t012-composer input { font-family: "Lucida Grande", var(--font); color: rgb(29 29 31); background: #fff; border-color: rgb(141 148 159); box-shadow: inset 0 2px 4px rgb(0 0 0 / .14); }
+.t012-app[data-m="aqua"] .t012-send { border-color: var(--edge); background: var(--face); box-shadow: inset 0 -14px 18px -8px var(--glow), inset 0 2px 2px rgb(255 255 255 / .5), 0 4px 8px -2px rgb(0 30 80 / .32); }
+.t012-app[data-m="aqua"] .t012-menu { font-family: "Lucida Grande", var(--font); color: rgb(29 29 31); background: linear-gradient(rgb(253 253 254), rgb(236 238 241)); border: 2px solid rgb(141 148 159);
+  box-shadow: inset 0 2px 2px rgb(255 255 255 / .6), 0 14px 30px -8px rgb(0 30 80 / .35); --t012-del: rgb(215 40 40); --t012-hover: rgb(58 146 242 / .16); }
+
+.t012-app[data-m="gradient"] { background: rgb(0 0 0); --t012-page: rgb(0 0 0); }
+.t012-app[data-m="gradient"] .t012-b { font-weight: 500; letter-spacing: -.015em; }
+.t012-app[data-m="gradient"] .t012-b.me { background: var(--t012-grad) 0 calc(-1 * var(--t012-top, 0px)) / 100% var(--t012-th); color: rgb(255 255 255); }
+.t012-app[data-m="gradient"] .t012-b.me::before { background: var(--t012-grad) 0 calc(-1 * var(--t012-foot, 0px)) / 100% var(--t012-th); }
+.t012-app[data-m="gradient"] .t012-b.them { --t012-face: rgb(38 38 42); background: rgb(38 38 42); color: rgb(244 244 245); }
+.t012-app[data-m="gradient"] .t012-composer input { color: rgb(244 244 245); background: rgb(28 28 31); border-color: rgb(255 255 255 / .06); }
+.t012-app[data-m="gradient"] .t012-composer input::placeholder { color: rgb(244 244 245 / .4); }
+.t012-app[data-m="gradient"] .t012-send { background: linear-gradient(160deg, rgb(31 191 143), rgb(13 148 136) 60%, rgb(11 127 134)) border-box; }
+.t012-app[data-m="gradient"] .t012-menu { color: rgb(244 244 245); background: rgb(28 28 31); box-shadow: 0 0 0 2px rgb(255 255 255 / .08), 0 18px 40px -10px rgb(0 0 0 / .8); --t012-del: rgb(255 105 97); --t012-hover: rgb(255 255 255 / .08); }
+
+.t012-app[data-m="skeuo"] { background: rgb(245 242 233); }
+.t012-app[data-m="skeuo"] .t012-b { font-family: "Avenir Next", var(--font); font-weight: 500; }
+.t012-app[data-m="skeuo"] .t012-b.me, .t012-app[data-m="skeuo"] .t012-send { border-color: rgb(18 22 31); background: linear-gradient(180deg, rgb(72 81 100) 0%, rgb(39 48 66) 100%);
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / .18), inset 0 2px 6px rgb(255 255 255 / .08), inset 0 -2px 0 rgb(0 0 0 / .22), 0 2px 4px rgb(15 23 42 / .18), 0 10px 22px -8px rgb(15 23 42 / .36);
+  color: rgb(255 255 255); text-shadow: 0 -2px 0 rgb(0 0 0 / .28); }
+.t012-app[data-m="skeuo"] .t012-b.them, .t012-app[data-m="skeuo"] .t012-menu { border: 2px solid rgb(15 23 42 / .14); background: linear-gradient(180deg, rgb(255 255 255) 0%, rgb(242 243 245) 100%);
+  box-shadow: inset 0 2px 0 rgb(255 255 255), inset 0 -2px 0 rgb(15 23 42 / .06), 0 2px 4px rgb(15 23 42 / .06), 0 8px 18px -8px rgb(15 23 42 / .18);
+  color: rgb(31 41 55); text-shadow: 0 1px 0 rgb(255 255 255); }
+.t012-app[data-m="skeuo"] .t012-composer input { font-family: "Avenir Next", var(--font); color: rgb(31 41 55); background: rgb(250 248 243); border-color: rgb(15 23 42 / .12); box-shadow: inset 0 2px 4px rgb(15 23 42 / .08); }
+.t012-app[data-m="skeuo"] .t012-menu { font-family: "Avenir Next", var(--font); --t012-del: rgb(200 50 50); --t012-hover: rgb(15 23 42 / .06); }
+
+.t012-app[data-m="solid"] { background: rgb(255 255 255); --t012-page: rgb(255 255 255); }
+.t012-app[data-m="solid"] .t012-b.me { --t012-face: rgb(10 132 255); background: rgb(10 132 255); color: rgb(255 255 255); }
+.t012-app[data-m="solid"] .t012-b.them { --t012-face: rgb(233 233 235); background: rgb(233 233 235); color: rgb(0 0 0); }
+.t012-app[data-m="solid"] .t012-composer input { color: #000; background: #fff; border-color: rgb(209 209 214); }
+.t012-app[data-m="solid"] .t012-send { background: rgb(10 132 255); }
+.t012-app[data-m="solid"] .t012-menu { color: #000; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / .06), 0 14px 34px -6px rgb(0 0 0 / .22); --t012-del: rgb(255 59 48); --t012-hover: rgb(0 0 0 / .05); }
+
+/* 5. 回复逐词出字：从 160ms 开始，间隔和时长按材质 */
+.t012-app[data-m="cirrus"] { --t012-wa: t012-w-rise 360ms var(--ease-out); --t012-wg: 18ms; }
+.t012-app[data-m="pixel"] { --t012-wa: t012-w-fade 1ms steps(1); --t012-wg: 26ms; }
+.t012-app[data-m="aqua"] { --t012-wa: t012-w-pop 300ms cubic-bezier(.34, 1.56, .64, 1); --t012-wg: 16ms; }
+.t012-app[data-m="gradient"] { --t012-wa: t012-w-sharp 320ms var(--ease-strong); --t012-wg: 14ms; }
+.t012-app[data-m="skeuo"] { --t012-wa: t012-w-stamp 160ms var(--ease-strong); --t012-wg: 22ms; }
+.t012-app[data-m="solid"] { --t012-wa: t012-w-fade 240ms var(--ease-out); --t012-wg: 14ms; }
+.t012-b.words .t012-w { animation: var(--t012-wa); animation-fill-mode: both; animation-delay: calc(160ms + var(--i) * var(--t012-wg)); }
+@keyframes t012-w-rise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes t012-w-fade { from { opacity: 0; } }
+@keyframes t012-w-pop { from { opacity: 0; transform: scale(.4); } }
+@keyframes t012-w-sharp { from { opacity: 0; filter: blur(8px); transform: translateY(6px); } }
+@keyframes t012-w-stamp { from { opacity: 0; transform: scale(1.14); } }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="011-motion-easing.html">← 011</a><a href="013-shockwave-halo.html">013 →</a></span></nav>
+<section class="tip" id="t012">
+  <div class="tip-h"><span class="no">012</span><h2>消息气泡的材质与动效</h2><a class="src" href="https://x.com/Kubai087/status/2118508433704169726" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">材质决定颜料、字体和背景，也决定弹簧手感和出入场方式。整段对话一起移动，每个气泡沿自己的弹簧走到新位置；长按或右键气泡打开菜单。</p>
+  <div class="stage">
+    <div class="ctrls">
+      <div class="seg" id="t012-mat" role="group" aria-label="气泡材质"><button type="button" data-v="cirrus" aria-pressed="true">Cirrus</button><button type="button" data-v="pixel" aria-pressed="false">像素</button><button type="button" data-v="aqua" aria-pressed="false">Aqua</button><button type="button" data-v="gradient" aria-pressed="false">渐变</button><button type="button" data-v="skeuo" aria-pressed="false">拟物</button><button type="button" data-v="solid" aria-pressed="false">纯色</button></div>
+    </div>
+    <div class="t012-fit" id="t012-fit">
+      <div class="t012-app" id="t012-app" data-m="cirrus">
+        <canvas class="t012-sky" id="t012-sky" aria-hidden="true"></canvas>
+        <canvas class="t012-px" id="t012-px" aria-hidden="true"></canvas>
+        <div class="t012-thread" id="t012-thread" role="list" aria-label="对话" aria-live="polite"></div>
+        <canvas class="t012-dots" id="t012-dots" role="img" aria-label="正在输入"></canvas>
+        <div class="t012-menu" id="t012-menu" role="menu" aria-label="消息操作" hidden>
+          <button type="button" role="menuitem" data-a="copy">复制</button><button type="button" role="menuitem" data-a="regen">重新生成</button><button type="button" role="menuitem" data-a="read">朗读</button><button type="button" role="menuitem" data-a="del" class="del">删除</button>
+        </div>
+        <form class="t012-composer" id="t012-form"><input id="t012-input" aria-label="消息" autocomplete="off"><button class="t012-send" type="submit" aria-label="发送"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></form>
+      </div>
+    </div>
+  </div>
+  <ul class="specs"><li>28/38px · padding 17×26 · 圆角 38 · 最宽 680</li><li>组内 4px · 组间 16px · 圆角过渡 200ms</li><li>弹簧 response 0.34–0.52s</li><li>像素 trace 衰减 60ms · Bayer 4×4</li><li>删除补位 60ms 起，逐条 +65ms，落地回弹</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 012 消息气泡 ---------- */
+(() => {
+  const W = 1080, H = 930, SIDE = 48, BOTTOM = 786, DOT = 48;
+  const fit = $('#t012-fit'), app = $('#t012-app'), thread = $('#t012-thread'), input = $('#t012-input'), menu = $('#t012-menu');
+  const skyCv = $('#t012-sky'), pxCv = $('#t012-px'), dotCv = $('#t012-dots');
+  const reduce = () => reduceMotion.matches;
+
+  /* 缓动：e(已过秒数, 总秒数) → 进度。贝塞尔按比例取值，弹簧按真实时间取值 */
+  const bez = (x1, y1, x2, y2) => {
+    const f = (t, a, b) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
+    return u => { if (u <= 0) return 0; if (u >= 1) return 1; let lo = 0, hi = 1, t = u; for (let k = 0; k < 24; k++) { t = (lo + hi) / 2; if (f(t, x1, x2) < u) lo = t; else hi = t; } return f(t, y1, y2); };
+  };
+  // 阻尼弹簧的阶跃响应：response 是无阻尼周期，damping 是阻尼比（与 SwiftUI 的 spring 参数一致）
+  const springFn = (response, damping) => {
+    const w = 2 * Math.PI / response, wd = w * Math.sqrt(1 - damping ** 2);
+    return s => 1 - Math.exp(-damping * w * s) * (Math.cos(wd * s) + damping * w / wd * Math.sin(wd * s));
+  };
+  const B = f => (s, d) => f(s / d), S = (r, z) => { const f = springFn(r, z); return s => f(s); };
+  const OUT = B(bez(0, 0, .58, 1)), STRONG = B(bez(.22, 1, .36, 1)), IN = B(bez(.42, 0, 1, 1));
+  const linearOK = CSS.supports('animation-timing-function', 'linear(0, 1)');
+  const linearOf = (e, ms) => linearOK ? `linear(${Array.from({ length: 33 }, (_, i) => e(i / 32 * ms / 1000, ms / 1000).toFixed(4)).join(', ')})` : 'cubic-bezier(.22, 1, .36, 1)';
+
+  /* 每个气泡的可动画属性：只落到 transform、opacity、filter（Cirrus 另有 backdrop-filter） */
+  const BASE = { s: 1, ty: 0, o: 1, blur: 0, glass: 1, dim: 0, lift: 1, open: 1 };
+  const FADES = new Set(['o', 'dim']);
+  function anim(m, p, from, to, ms, e = OUT, delay = 0) {
+    if (from === null) from = get(m, p);
+    if (reduce() && !FADES.has(p)) { m.fx[p] = to; delete m.tw[p]; return; }
+    m.fx[p] = from;
+    m.tw[p] = { from, to, t0: performance.now() + delay, ms, e };
+  }
+  function get(m, p, now = performance.now()) {
+    const a = m.tw[p];
+    if (!a) return m.fx[p];
+    const s = (now - a.t0) / 1000;
+    if (s <= 0) return a.from;
+    if (s * 1000 >= a.ms) { m.fx[p] = a.to; delete m.tw[p]; return a.to; }
+    return a.from + (a.to - a.from) * a.e(s, a.ms / 1000);
+  }
+
+  /* 材质：对话弹簧、落地时保留的反弹速度、发送 / 回复展开 / 删除 / 菜单出现的方式 */
+  const MAT = {
+    cirrus: { spring: [.5, .88], keep: .3, open: [640, S(.5, .95)],
+      send: m => { anim(m, 'glass', 0, 1, 560); anim(m, 's', .94, 1, 420); anim(m, 'o', 0, 1, 200); },
+      exit: m => { anim(m, 'glass', null, 0, 240); anim(m, 'o', null, 0, 180, IN, 240); return 420; },
+      menu: [[{ opacity: 0, backdropFilter: 'blur(0px) saturate(100%)' }, { opacity: 1, backdropFilter: 'blur(36px) saturate(130%)' }], { duration: 320, easing: 'cubic-bezier(0, 0, .58, 1)' }] },
+    pixel: { spring: [.42, .8], keep: .25, open: [560, STRONG],
+      send: m => { anim(m, 's', .3, 1, 380, STRONG); anim(m, 'o', 0, 1, 200); },
+      exit: () => 360,
+      menu: [[{ clipPath: 'inset(-4px -4px 100% -4px)' }, { clipPath: 'inset(-4px -4px -4px -4px)' }], { duration: 250, easing: 'steps(5, end)' }] },
+    aqua: { spring: [.46, .74], keep: .45, open: [760, S(.52, .66)],
+      send: m => { anim(m, 's', .5, 1, 1100, S(.5, .5)); m.jelly = performance.now(); },
+      exit: m => { anim(m, 's', null, 1.14, 320, IN); anim(m, 'o', null, 0, 90, IN, 230); return 320; },
+      menu: [[{ opacity: 0, transform: 'scale(.7)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: 'cubic-bezier(.34, 1.56, .64, 1)' }] },
+    gradient: { spring: [.52, .92], keep: .2, open: [560, STRONG],
+      send: m => { anim(m, 'blur', 16, 0, 440, STRONG); anim(m, 's', .96, 1, 440, STRONG); anim(m, 'o', 0, 1, 300); },
+      exit: m => { anim(m, 'blur', null, 24, 380, IN); anim(m, 's', null, 1.12, 380, IN); anim(m, 'o', null, 0, 380, IN); return 380; },
+      menu: [[{ opacity: 0, filter: 'blur(12px)' }, { opacity: 1, filter: 'blur(0px)' }], { duration: 320, easing: 'cubic-bezier(.22, 1, .36, 1)' }] },
+    skeuo: { spring: [.34, .84], keep: .35, open: [520, S(.38, .8)],
+      send: m => anim(m, 's', 1.1, 1, 900, S(.36, .55)),
+      exit: m => { anim(m, 's', null, .94, 110); anim(m, 'ty', 0, 36, 210, IN, 110); anim(m, 'o', null, 0, 210, IN, 110); return 320; },
+      menu: [[{ opacity: 0, transform: 'translateY(-14px)' }, { opacity: 1, transform: 'none' }], { duration: 520, easing: linearOf(S(.36, .62), 520) }] },
+    solid: { spring: [.42, .86], keep: .3, open: [560, STRONG],
+      send: m => { anim(m, 's', .9, 1, 380, STRONG); anim(m, 'o', 0, 1, 120); },
+      exit: m => { anim(m, 's', null, .7, 260, IN); anim(m, 'blur', null, 8, 260, IN); anim(m, 'o', null, 0, 260, IN); return 260; },
+      menu: [[{ opacity: 0, transform: 'scale(.88)' }, { opacity: 1, transform: 'none' }], { duration: 240, easing: 'cubic-bezier(.22, 1, .36, 1)' }] },
+  };
+
+  const SCRIPT = {
+    log: [['them', '早！周末要我帮你安排吗？'], ['me', '好呀'], ['me', '找个风景好的地方'], ['them', '那……窗外有风景的工位？'], ['me', '要户外的']],
+    next: [
+      ['去徒步？', '试试日出时的山脊步道：整个上午都是晴天，云在你脚下。往返四小时左右，山顶风大，记得带件薄外套。'],
+      ['要带什么？', '两升水、能量棒、防晒和一件薄外套。鞋选抓地好的，最后一段是碎石路，下坡慢一点。'],
+      ['下山以后呢？', '山脚有家开了三十年的面馆，十一点开门。吃完沿河走回车站，正好赶上一点半那班车。'],
+    ],
+  };
+  const segmenter = 'Segmenter' in Intl ? new Intl.Segmenter('zh', { granularity: 'word' }) : null;
+  // 逐词拆成 inline-block 后避头尾会失效，把标点和空格并进前一个词
+  const words = s => (segmenter ? [...segmenter.segment(s)].map(x => x.segment) : [...s])
+    .reduce((a, w) => (a.length && /^[\p{P}\s]+$/u.test(w) ? a[a.length - 1] += w : a.push(w), a), []);
+
+  let cur = 'cirrus', msgs = [], turn = 0, timers = [], menuFor = null, pressTimer = 0;
+  const dotM = { fx: { ...BASE, o: 0 }, tw: {}, y: BOTTOM - DOT };
+
+  function fill(m, text, byWord) {
+    const tx = document.createElement('span');
+    tx.className = 't012-tx';
+    if (byWord) words(text).forEach((w, i) => { const s = document.createElement('span'); s.className = 't012-w'; s.style.setProperty('--i', i); s.textContent = w; tx.append(s); });
+    else tx.textContent = text;
+    m.el.replaceChildren(tx);
+  }
+  function make(who, text, byWord = false) {
+    const el = document.createElement('div');
+    el.className = `t012-b ${who}`;
+    el.tabIndex = 0;
+    el.setAttribute('role', 'listitem');
+    const m = { who, text, el, y: 0, v: 0, target: 0, hold: 0, land: false, fx: { ...BASE }, tw: {}, ox: .5, oy: 1, group: '' };
+    el._m = m;
+    el.style.transform = 'translate3d(0, -9999px, 0)';  // 第一帧渲染前先放到画面外
+    fill(m, text, byWord);
+    thread.append(el);
+    measure(m);
+    return m;
+  }
+  const measure = m => { m.h = m.el.offsetHeight; m.w = m.el.offsetWidth; };
+  const live = () => msgs.filter(m => !m.dying);
+
+  // 同一发送者连续的消息是一组：single / first / middle / last，打字点阵不参与分组
+  function regroup() {
+    const list = live().filter(m => !m.typing);
+    list.forEach((m, i) => {
+      const a = list[i - 1]?.who === m.who, b = list[i + 1]?.who === m.who;
+      const g = a ? (b ? 'middle' : 'last') : (b ? 'first' : 'single');
+      if (g !== m.group) { m.el.classList.remove('single', 'first', 'middle', 'last'); m.el.classList.add(g); m.group = g; }
+    });
+  }
+  // 从下往上排：组内 4px、组间 16px。展开中的回复只按露出的高度占位
+  function layout() {
+    const list = live();
+    let bottom = BOTTOM;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const m = list[i], below = list[i + 1];
+      if (below) bottom -= below.who === m.who && !below.typing && !m.typing ? 4 : 16;
+      const open = Math.min(1, get(m, 'open'));
+      m.target = bottom - m.h;
+      bottom -= m.typing ? DOT : DOT + (m.h - DOT) * open;
+    }
+    // 顶部已经完全看不见、也不在动的旧消息直接移除
+    msgs = msgs.filter(m => {
+      if (m.dying || m.typing || m.target + m.h > -40 || m.y + m.h > -40) return true;
+      m.el.remove();
+      return false;
+    });
+  }
+
+  /* 3. 整段对话一起动：每个气泡沿自己的弹簧从当前位置走向目标 */
+  function step(dt, now) {
+    const [r, z] = MAT[cur].spring, k = (2 * Math.PI / r) ** 2, c = 4 * Math.PI * z / r, keep = MAT[cur].keep;
+    const list = live(), oi = list.findIndex(m => m.tw.open);
+    list.forEach((m, i) => {
+      // 回复展开时，上方的对话直接跟着展开的气泡走，不走弹簧，避免重叠
+      if (reduce() || (oi >= 0 && i < oi)) { m.y = m.target; m.v = 0; return; }
+      if (now < m.hold) return;
+      for (let n = 0; n < 4; n++) {
+        const h = dt / 4;
+        m.v += (-k * (m.y - m.target) - c * m.v) * h;
+        m.y += m.v * h;
+        // 删除后补位：到位时还在往下走，就反向并保留一部分速度，轻轻弹起，不陷进下面那条
+        if (m.land && m.v > 0 && m.y > m.target) { m.y = m.target; m.v = -m.v * keep; }
+      }
+      if (Math.abs(m.y - m.target) < .3 && Math.abs(m.v) < 6) { m.y = m.target; m.v = 0; m.land = false; }
+    });
+  }
+
+  function render(now) {
+    for (const m of msgs) {
+      if (m.typing) continue;
+      const f = p => get(m, p, now), el = m.el;
+      let sx = f('s') * f('lift'), sy = sx;
+      if (m.jelly) {  // Aqua 果冻：宽高反向晃动，起始相差 12%，约 0.2s 衰减；高度不超过 1.04
+        const a = (now - m.jelly) / 1000, w = .12 * Math.exp(-a / .07) * Math.cos(2 * Math.PI * a / .1);
+        sx *= 1 + w / 2;
+        sy = Math.min(1.04, sy * (1 - w / 2));
+        if (!m.tw.s) m.jelly = 0;
+      }
+      const open = f('open');
+      if (open > 1) { sx *= 1 + (open - 1) * .5; sy *= 1 + (open - 1) * .5; }  // Aqua 展开略过头
+      let y = m.y + f('ty'), dx = 0;
+      if (cur === 'pixel') {  // 文字位置对齐 4px 网格
+        y = Math.round(y / 4) * 4;
+        if (m.who === 'me') { const L = W - SIDE - m.w; dx = Math.round(L / 4) * 4 - L; }
+      }
+      const dim = f('dim'), o = f('o'), blur = f('blur') + (cur === 'gradient' ? 4 * dim : 0);
+      el.style.transformOrigin = `${m.ox * 100}% ${m.oy * 100}%`;
+      el.style.transform = `translate3d(${dx}px, ${y}px, 0) scale(${sx}, ${sy})`;
+      el.style.opacity = cur === 'pixel' ? 1 - .55 * dim : o * (1 - .58 * dim);
+      el.style.filter = blur > .05 ? `blur(${blur}px)` : '';
+      if (cur === 'cirrus') {
+        const g = f('glass'), bf = g < 1 ? `blur(${26 * g}px) saturate(${100 + 30 * g}%)` : '';
+        el.style.backdropFilter = bf; el.style.webkitBackdropFilter = bf;
+        el.style.setProperty('--t012-tint-o', g);
+      }
+      if (cur === 'gradient') { el.style.setProperty('--t012-top', y + 'px'); el.style.setProperty('--t012-foot', y + m.h - 38 + 'px'); }
+      if (cur === 'pixel') el.style.setProperty('--t012-txo', m.dying || f('s') < .92 ? 0 : 1);
+      // 回复从点阵所在的左下角展开：文字已按最终宽度排好，只用裁剪露出，绝不重新换行
+      el.style.clipPath = open < 1 ? `inset(${(1 - open) * (m.h - DOT)}px ${(1 - open) * (m.w - DOT)}px 0 0 round 38px)` : '';
+      Object.assign(m, { rsx: sx, rsy: sy, ry: y, rx: dx, ro: o, rdim: dim, ropen: open });
+    }
+  }
+
+  /* 像素：canvas 一格一像素，按 4px 网格逐格测试气泡形状，trace 衰减留下抖动拖影 */
+  const CW = W / 4, CH = H / 4, N = CW * CH;
+  pxCv.width = CW; pxCv.height = CH;
+  const pctx = pxCv.getContext('2d'), img = pctx.createImageData(CW, CH);
+  const trace = new Float32Array(N), cov = new Float32Array(N), own = new Int16Array(N), col = new Uint8Array(N * 3), killed = new Uint8Array(N);
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v + .5) / 16);
+  const PX = { bg: [27, 30, 52], line: [14, 15, 34], me: [93, 112, 232], them: [244, 243, 236] };
+  const hash = (i, j) => ((Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) >>> 0) % 997 / 997;
+  function shape(m) {
+    const w = m.ropen < 1 ? DOT + (m.w - DOT) * m.ropen : m.w, h = m.ropen < 1 ? DOT + (m.h - DOT) * m.ropen : m.h;
+    const L = (m.who === 'me' ? W - SIDE - m.w : SIDE) + m.rx, T = m.ry;
+    const bx = m.who === 'me' ? L + m.w - w : L, by = T + m.h - h;
+    const ox = L + m.ox * m.w, oy = T + m.oy * m.h;
+    const x0 = ox + (bx - ox) * m.rsx, x1 = ox + (bx + w - ox) * m.rsx, y0 = oy + (by - oy) * m.rsy, y1 = oy + (by + h - oy) * m.rsy;
+    const s = Math.min(m.rsx, m.rsy), R = 16 * s, J = 4 * s, g = m.group, me = m.who === 'me';
+    const joinTop = g === 'middle' || g === 'last', joinBot = g === 'first' || g === 'middle';
+    return { x0, x1, y0, y1, me, tail: g === 'last' || g === 'single',
+      r: { tl: !me && joinTop ? J : R, tr: me && joinTop ? J : R, bl: !me && joinBot ? J : R, br: me && joinBot ? J : R } };
+  }
+  function inside(sh, x, y) {
+    const { x0, x1, y0, y1, r } = sh;
+    if (sh.tail) {  // 阶梯尾巴：原点在发送者一侧底角，x 朝外
+      const tx = sh.me ? x - x1 : x0 - x, ty = y - y1;
+      if (tx >= -10 && tx <= 14 && ty >= -16 && ty <= 0 && ty >= -16 + (tx + 10) * 16 / 24) return true;
+    }
+    if (x < x0 || x > x1 || y < y0 || y > y1) return false;
+    const corner = (cx, cy, rad) => (x - cx) ** 2 + (y - cy) ** 2 <= rad * rad;
+    if (x < x0 + r.tl && y < y0 + r.tl) return corner(x0 + r.tl, y0 + r.tl, r.tl);
+    if (x > x1 - r.tr && y < y0 + r.tr) return corner(x1 - r.tr, y0 + r.tr, r.tr);
+    if (x < x0 + r.bl && y > y1 - r.bl) return corner(x0 + r.bl, y1 - r.bl, r.bl);
+    if (x > x1 - r.br && y > y1 - r.br) return corner(x1 - r.br, y1 - r.br, r.br);
+    return true;
+  }
+  function drawPixel(dt, now) {
+    cov.fill(0); own.fill(0); killed.fill(0);
+    const fills = [];
+    msgs.forEach((m, idx) => {
+      if (m.typing) return;
+      const sh = shape(m), c = PX[m.who], d = .6 * m.rdim;
+      fills[idx + 1] = c.map((v, i) => v + (PX.bg[i] - v) * d);  // 变暗：填色向背景混
+      const alpha = m.dying ? 1 : m.ro, die = m.dying ? (now - m.dieT0) / 360 : -1;
+      const i0 = Math.max(0, Math.floor((sh.x0 - 14) / 4)), i1 = Math.min(CW - 1, Math.ceil((sh.x1 + 14) / 4));
+      const j0 = Math.max(0, Math.floor(sh.y0 / 4)), j1 = Math.min(CH - 1, Math.ceil(sh.y1 / 4));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        if (!inside(sh, i * 4 + 2, j * 4 + 2)) continue;
+        const k = j * CW + i;
+        if (die >= 0 && hash(i, j) < die) { killed[k] = 1; continue; }  // 删除：按打散的顺序瞬间消失，不留拖影
+        if (alpha > cov[k]) { cov[k] = alpha; own[k] = idx + 1; }
+      }
+    });
+    const decay = reduce() ? 0 : Math.exp(-dt / .06), data = img.data;
+    for (let j = 0; j < CH; j++) for (let i = 0; i < CW; i++) {
+      const k = j * CW + i, o = own[k];
+      if (o) {
+        const edge = i === 0 || i === CW - 1 || j === 0 || j === CH - 1 || own[k - 1] !== o || own[k + 1] !== o || own[k - CW] !== o || own[k + CW] !== o;
+        const c = edge ? PX.line : fills[o];
+        col[k * 3] = c[0]; col[k * 3 + 1] = c[1]; col[k * 3 + 2] = c[2];
+      }
+      trace[k] = killed[k] ? 0 : Math.max(trace[k] * decay, cov[k]);
+      const t = trace[k], p = k * 4;
+      if (t > BAYER[(j & 3) * 4 + (i & 3)]) {
+        data[p] = col[k * 3]; data[p + 1] = col[k * 3 + 1]; data[p + 2] = col[k * 3 + 2];
+        data[p + 3] = t >= 1 ? 255 : (.25 + .75 * t) * 255;  // 拖影保持大小，但颜色向背景混
+      } else data[p + 3] = 0;
+    }
+    pctx.putImageData(img, 0, 0);
+  }
+
+  /* 5. 输入中点阵：每种材质一小段物理，写成时间的平滑函数；动的加 1/25s 快门的运动模糊 */
+  const g2 = (dx, dy, s) => Math.exp(-(dx * dx + dy * dy) / (2 * s * s));
+  const tri = u => 1 - Math.abs((u % 2 + 2) % 2 - 1);
+  const MATRIX = {
+    cirrus: { n: 6, color: [255, 255, 255], f: (x, y, t) => {  // 沿慢圆周放出的热：过去一秒留下的高斯之和，越旧越宽越淡
+      let b = 0;
+      for (let k = 0; k < 14; k++) { const a = k / 14, ph = 2 * Math.PI * (t - a) / 2.2, s = .55 + 1.2 * a; b += g2(x - 2.5 - 1.5 * Math.cos(ph), y - 2.5 - 1.5 * Math.sin(ph), s) * (.55 / s) ** 2; }
+      return Math.min(1, b * .5);
+    } },
+    pixel: { n: 6, color: [244, 243, 236], square: true, levels: 4, f: (x, y, t) => {  // 顶部中间挂下的单摆
+      const a = .9 * Math.cos(2 * Math.PI * t / 1.1), px = 2.5, py = -.6, bx = px + 5 * Math.sin(a), by = py + 5 * Math.cos(a);
+      const u = clamp(((x - px) * (bx - px) + (y - py) * (by - py)) / 25);
+      return Math.max(g2(x - bx, y - by, .55), .38 * g2(x - px - u * (bx - px), y - py - u * (by - py), .3));
+    } },
+    aqua: { n: 5, color: [43, 132, 236], f: (x, y, t) => {  // 每 0.9s 一滴，水波向外传开：半径减时间的指数衰减余弦
+      let b = 0;
+      for (let k = 0; k < 3; k++) {
+        const n = Math.floor(t / .9) - k, age = t - n * .9, r = Math.hypot(x - 2 - Math.sin(n * 2.4), y - 2 - Math.cos(n * 1.7)) - 3 * age;
+        b += Math.exp(-2 * age) * Math.exp(-r * r / 1.4) * (.5 + .5 * Math.cos(3.4 * r));
+      }
+      return Math.min(1, b);
+    } },
+    gradient: { n: 6, f: (x, y, t) => {  // 两盏一样的灯绕中心转，1.3s 一圈
+      const a = 2 * Math.PI * t / 1.3, c = 1.5 * Math.cos(a), s = 1.5 * Math.sin(a);
+      return Math.max(g2(x - 2.5 - c, y - 2.5 - s, .7), g2(x - 2.5 + c, y - 2.5 + s, .7));
+    } },
+    skeuo: { n: 4, color: [39, 48, 66], f: (x, y, t) => {  // 弹跳的球：两次落地（间隔 0.62s）间是抛物线，横向匀速漂移、碰墙折返
+      const ph = (t % .62) / .62;
+      return g2(x - 3 * tri(t * 1.9 / 3), y - (3 - 12 * ph * (1 - ph)), .5);
+    } },
+    solid: { n: 5, color: [142, 142, 147], f: (x, y, t) => {  // 拨动的弦：基频加一个频率加倍、更弱的二阶模态
+      const p = t % 1.8, s = (x + .5) / 5;
+      const u = Math.exp(-p / .8) * (1.3 * Math.sin(Math.PI * s) * Math.cos(2 * Math.PI * 2.2 * p) + .45 * Math.sin(2 * Math.PI * s) * Math.cos(2 * Math.PI * 4.4 * p));
+      return Math.exp(-((y - 2 - u) ** 2) / (2 * .45 * .45));
+    } },
+  };
+  dotCv.width = dotCv.height = DOT * 2;
+  const dctx = dotCv.getContext('2d');
+  function drawDots(now) {
+    const a = get(dotM, 'o', now);
+    dotCv.style.opacity = a;
+    if (a <= 0) return;
+    dotCv.style.transform = `translateY(${dotM.y}px)`;
+    const M = MATRIX[cur], n = M.n, pitch = DOT / n, t = reduce() ? .35 : now / 1000, shots = reduce() ? 1 : 4;
+    dctx.setTransform(2, 0, 0, 2, 0, 0);
+    dctx.clearRect(0, 0, DOT, DOT);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      let b = 0;
+      for (let k = 0; k < shots; k++) b += M.f(i, j, t - k / shots / 25);
+      b /= shots;
+      if (M.levels) b = Math.round(b * (M.levels - 1)) / (M.levels - 1);
+      const c = M.color || [31, 191, 143].map((v, q) => v + ([11, 127, 134][q] - v) * (i + j) / (2 * n - 2));  // 渐变：薄荷绿到青色
+      dctx.fillStyle = `rgb(${c.join(' ')} / ${.16 + .84 * b})`;
+      const cx = (i + .5) * pitch, cy = (j + .5) * pitch;
+      if (M.square) dctx.fillRect(cx - pitch * .36, cy - pitch * .36, pitch * .72, pitch * .72);
+      else { dctx.beginPath(); dctx.arc(cx, cy, pitch * .34, 0, Math.PI * 2); dctx.fill(); }
+    }
+  }
+
+  /* 4. 发送 → 5. 长回复 */
+  function send(text) {
+    timers.forEach(clearTimeout);
+    msgs = msgs.filter(m => !m.typing);
+    anim(dotM, 'o', null, 0, 120);
+    const [say, reply] = SCRIPT.next[turn++ % SCRIPT.next.length];
+    const m = make('me', text || say);
+    msgs.push(m);
+    regroup(); layout();
+    m.y = m.target + 40;  // 从自己位置下方约 40px 升上来
+    m.ox = .5; m.oy = 1;
+    if (reduce()) anim(m, 'o', 0, 1, 200); else MAT[cur].send(m);
+    input.placeholder = SCRIPT.next[turn % SCRIPT.next.length][0];
+    timers = [setTimeout(typing, 520), setTimeout(() => answer(reply), 2600)];
+  }
+  function typing() {
+    const t = { typing: true, who: 'them', h: DOT, w: DOT, y: 0, v: 0, target: 0, hold: 0, fx: { ...BASE }, tw: {} };
+    msgs.push(t);
+    layout();
+    t.y = t.target;
+    dotM.y = t.y;
+    anim(dotM, 'o', 0, 1, 160);
+  }
+  function answer(text) {
+    const i = msgs.findIndex(m => m.typing), m = make('them', text, true);
+    if (i >= 0) msgs.splice(i, 1, m); else msgs.push(m);
+    m.ox = 0; m.oy = 1;
+    m.fx.open = 0;
+    const [ms, e] = MAT[cur].open;
+    anim(m, 'open', 0, 1, ms, e);
+    if (reduce()) anim(m, 'o', 0, 1, 200);
+    regroup(); layout();
+    m.y = m.target;
+    dotM.y = m.y + m.h - DOT;
+    anim(dotM, 'o', null, 0, 200);
+    playWords(m);
+  }
+  // 逐词动画播完就摘掉 class，否则切换材质时动画名变化会让旧回复重播
+  function playWords(m) {
+    m.el.classList.remove('words');
+    void m.el.offsetWidth;
+    m.el.classList.add('words');
+    const lastWord = m.el.firstChild.lastChild;
+    m.el.addEventListener('animationend', function done(e) { if (e.target === lastWord) { m.el.classList.remove('words'); m.el.removeEventListener('animationend', done); } });
+  }
+  function regenerate(m) {
+    fill(m, m.text, true);
+    playWords(m);
+    m.ox = 0; m.oy = 1;
+    const [ms, e] = MAT[cur].open;
+    anim(m, 'open', 0, 1, ms, e);
+  }
+
+  /* 6. 长按 → 菜单 → 从中间删除 */
+  function openMenu(m) {
+    if (m.dying) return;
+    menuFor = m;
+    m.ox = m.oy = .5;
+    anim(m, 'lift', null, 1.03, 520, S(.4, .7));
+    msgs.forEach(o => o !== m && !o.typing && anim(o, 'dim', null, 1, 200));
+    $('[data-a="regen"]', menu).hidden = m.who !== 'them';
+    menu.hidden = false;
+    menu.getAnimations().forEach(a => a.cancel());
+    const mh = menu.offsetHeight, below = m.y + m.h + 14;
+    const top = below + mh <= H - 24 ? below : Math.max(16, m.y - mh - 14);
+    Object.assign(menu.style, { top: top + 'px', left: m.who === 'them' ? SIDE + 'px' : '', right: m.who === 'me' ? SIDE + 'px' : '',
+      transformOrigin: `${m.who === 'me' ? 'right' : 'left'} ${top > m.y ? 'top' : 'bottom'}` });
+    const [kf, opt] = reduce() ? [[{ opacity: 0 }, { opacity: 1 }], { duration: 160 }] : MAT[cur].menu;
+    menu.animate(kf, opt);
+    $('button:not([hidden])', menu).focus();
+  }
+  function closeMenu(refocus) {
+    const m = menuFor;
+    if (!m) return null;
+    menuFor = null;
+    anim(m, 'lift', null, 1, 260);
+    msgs.forEach(o => anim(o, 'dim', null, 0, 200));
+    menu.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(.96)' }], { duration: 180, easing: 'cubic-bezier(.42, 0, 1, 1)' })
+      .onfinish = () => { if (!menuFor) menu.hidden = true; };
+    if (refocus) m.el.focus();
+    return m;
+  }
+  function remove(m) {
+    const list = live(), i = list.indexOf(m);
+    const near = list.slice(i + 1).find(x => !x.typing) || list.slice(0, i).reverse().find(x => !x.typing);
+    if (m.el.contains(document.activeElement) || menu.contains(document.activeElement)) (near ? near.el : input).focus();
+    m.dying = true;
+    m.dieT0 = performance.now();
+    m.ox = m.oy = .5;
+    m.el.removeAttribute('tabindex');
+    m.el.setAttribute('aria-hidden', 'true');
+    m.dieEnd = m.dieT0 + (reduce() ? (anim(m, 'o', null, 0, 200), 200) : MAT[cur].exit(m));
+    regroup(); layout();  // 一开始离开就移出布局；空位两侧同一发送者时合并成一组
+    // 上方的消息落进空位，下方不动：最近的 60ms 后先动，往上每条晚 65ms
+    for (let k = i - 1, n = 0; k >= 0; k--, n++) Object.assign(list[k], { hold: m.dieT0 + 60 + 65 * n, land: true });
+  }
+
+  menu.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const a = b.dataset.a, m = closeMenu(a !== 'del');
+    if (a === 'copy') navigator.clipboard.writeText(m.text);
+    if (a === 'read') speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(m.text), { lang: 'zh-CN' }));
+    if (a === 'regen') regenerate(m);
+    if (a === 'del') remove(m);
+  });
+  if (!('speechSynthesis' in window)) $('[data-a="read"]', menu).remove();
+  menu.addEventListener('keydown', e => {
+    const items = $$('button:not([hidden])', menu), i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus(); }
+    if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); closeMenu(true); }
+  });
+  const cancelPress = () => {
+    clearTimeout(pressTimer);
+    const m = pressTimer && thread._pressed;
+    pressTimer = 0;
+    if (m && menuFor !== m) anim(m, 'lift', null, 1, 200);
+  };
+  thread.addEventListener('pointerdown', e => {
+    const el = e.target.closest('.t012-b');
+    if (!el || el._m.dying || e.button > 0) return;
+    const m = el._m;
+    thread._pressed = m;
+    m.ox = m.oy = .5;
+    anim(m, 'lift', null, .955, 160);  // 先按下去，长按到时再抬起
+    pressTimer = setTimeout(() => { pressTimer = 0; openMenu(m); }, 450);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => thread.addEventListener(t, cancelPress));
+  thread.addEventListener('contextmenu', e => {
+    const el = e.target.closest('.t012-b');
+    if (!el || el._m.dying) return;
+    e.preventDefault();
+    clearTimeout(pressTimer); pressTimer = 0;
+    if (menuFor === el._m) return;  // 触屏长按松手后浏览器还会补发一次 contextmenu
+    openMenu(el._m);
+  });
+  thread.addEventListener('keydown', e => {
+    const el = e.target.closest('.t012-b');
+    if (el && (e.key === 'Enter' || e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey))) { e.preventDefault(); openMenu(el._m); }
+  });
+  document.addEventListener('pointerdown', e => { if (menuFor && !menu.contains(e.target)) closeMenu(false); });
+  $('#t012-form').addEventListener('submit', e => { e.preventDefault(); closeMenu(false); send(input.value.trim()); input.value = ''; });
+
+  /* Cirrus 天空：WebGL 光线步进云层，只渲染一次；分条绘制，避免一帧卡太久 */
+  let skyDone = false;
+  function renderSky() {
+    if (skyDone) return;
+    skyDone = true;
+    const q = clamp(fit.clientWidth / W * devicePixelRatio, 1, 2);
+    skyCv.width = Math.round((W + 200) * q); skyCv.height = Math.round(H * q);
+    const gl = skyCv.getContext('webgl', { preserveDrawingBuffer: true });
+    if (!gl) return;  // 没有 WebGL 时保留 CSS 渐变天空
+    const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, 'attribute vec2 p; void main() { gl_Position = vec4(p, 0., 1.); }'));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, `precision highp float;
+uniform vec2 res;
+float h3(vec3 p) { p = fract(p * .3183099 + .1); p *= 17.; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float noise(vec3 x) { vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
+  return mix(mix(mix(h3(i), h3(i + vec3(1, 0, 0)), f.x), mix(h3(i + vec3(0, 1, 0)), h3(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), f.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), f.x), f.y), f.z); }
+float fbm(vec3 p) { float s = 0., a = .5; for (int i = 0; i < 6; i++) { s += a * noise(p); p *= 2.03; a *= .5; } return s; }
+float dens(vec3 p) { return clamp(2.8 * fbm(p * .95) - 1.05 - .75 * p.y, 0., 1.); }
+void main() {
+  vec2 uv = (gl_FragCoord.xy - .5 * res) / res.y;
+  vec3 ro = vec3(0., 1.25, 0.), rd = normalize(vec3(uv.x, uv.y - .02, 1.25)), sun = normalize(vec3(-.35, .75, .55));
+  vec3 sky = mix(vec3(.66, .82, .97), vec3(.15, .45, .9), pow(clamp(rd.y * 1.6 + .35, 0., 1.), .85));
+  sky += vec3(1., .78, .55) * .1 * pow(max(dot(rd, sun), 0.), 6.);
+  vec4 acc = vec4(0.); float t = .05;
+  for (int i = 0; i < 160; i++) {
+    vec3 p = ro + rd * t;
+    if (acc.a > .99 || (rd.y > 0. && p.y > 2.4)) break;  // 2.4 以上密度恒为 0
+    float d = dens(p);
+    if (d > 0.) {
+      float l = clamp((d - dens(p + .25 * sun)) / .4, 0., 1.);
+      vec3 c = mix(vec3(.5, .6, .74), vec3(1.), .2 + .8 * l);
+      c = mix(c, vec3(.9, .93, .97), .25 * d);
+      c = mix(c, sky, 1. - exp(-.0016 * t * t));
+      float a = .6 * d;
+      acc.rgb += (1. - acc.a) * a * c; acc.a += (1. - acc.a) * a;
+    }
+    t += max(.03, .025 * t);
+  }
+  gl_FragColor = vec4(acc.rgb + (1. - acc.a) * sky, 1.);
+}`));
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform2f(gl.getUniformLocation(prog, 'res'), skyCv.width, skyCv.height);
+    gl.viewport(0, 0, skyCv.width, skyCv.height);
+    gl.enable(gl.SCISSOR_TEST);
+    let y = 0;
+    (function strip() {
+      gl.scissor(0, y, skyCv.width, 48);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      y += 48;
+      if (y < skyCv.height) requestAnimationFrame(strip);
+    })();
+  }
+
+  /* 切换材质：对话淡出，换成新材质后从当前状态淡入 */
+  function setMaterial(v) {
+    closeMenu(false);
+    const out = app.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'cubic-bezier(.42, 0, 1, 1)', fill: 'forwards' });
+    out.onfinish = () => {
+      cur = v;
+      app.dataset.m = v;
+      if (v === 'cirrus') renderSky();
+      msgs.forEach(m => {
+        if (m.typing) return;
+        measure(m);
+        ['filter', 'backdropFilter', 'webkitBackdropFilter'].forEach(p => { m.el.style[p] = ''; });
+      });
+      trace.fill(0);
+      layout();
+      app.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, easing: 'cubic-bezier(0, 0, .58, 1)' });
+      out.cancel();
+    };
+  }
+  seg($('#t012-mat'), setMaterial);
+
+  new ResizeObserver(() => { const k = fit.clientWidth / W; fit.style.setProperty('--k', k); }).observe(fit);
+
+  let vis = false, raf = 0, last = 0;
+  function tick(now) {
+    raf = 0;
+    if (!vis) return;
+    const dt = last ? Math.min(.05, (now - last) / 1000) : 1 / 60;
+    last = now;
+    if (msgs.some(m => m.tw.open)) layout();
+    step(dt, now);
+    render(now);
+    // 点阵跟着输入中的占位走；回复展开时留在它的左下角淡出
+    const tp = msgs.find(m => m.typing || (m.who === 'them' && m.tw.open));
+    if (tp) dotM.y = tp.y + tp.h - DOT;
+    if (cur === 'pixel') drawPixel(dt, now);
+    drawDots(now);
+    msgs = msgs.filter(m => { if (!m.dying || now < m.dieEnd) return true; m.el.remove(); return false; });
+    raf = requestAnimationFrame(tick);
+  }
+  new IntersectionObserver(es => {
+    vis = es[0].isIntersecting;
+    if (vis && !raf) { last = 0; raf = requestAnimationFrame(tick); }
+    if (vis && cur === 'cirrus') renderSky();
+  }).observe(fit);
+
+  msgs = SCRIPT.log.map(([who, t]) => make(who, t));
+  regroup(); layout();
+  msgs.forEach(m => { m.y = m.target; });
+  input.placeholder = SCRIPT.next[0][0];
+  // 字体加载完尺寸会变，重新量一次再放到位
+  document.fonts.ready.then(() => { msgs.forEach(m => { if (!m.typing) measure(m); }); layout(); msgs.forEach(m => { if (!m.dying) m.y = m.target; }); });
+})();
+</script>
+</body>
+</html>

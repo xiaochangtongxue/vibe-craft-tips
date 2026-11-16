@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>005 · 更灵动的拖拽排序</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 005 拖拽排序 ---------- */
+.s-wrap { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 32px; align-items: center; }
+@media (max-width: 860px) { .s-wrap { grid-template-columns: minmax(0, 1fr); } }
+.s-dock { position: relative; display: flex; gap: 10px; padding: 12px; border-radius: 22px; background: var(--surface); width: max-content; max-width: 100%; margin: 72px auto 8px;
+  box-shadow: 0 0 0 1px var(--line), 0 14px 30px -16px rgba(15,23,42,.3); }
+.s-item { position: relative; flex: none; touch-action: none; cursor: pointer; outline: none; will-change: transform;
+  transition: transform 250ms cubic-bezier(.3, 1.25, .5, 1); }
+.s-item.lifted { transition: none; z-index: 5; }
+.s-tile { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 1px 2px rgba(15,23,42,.2);
+  transition: transform 220ms cubic-bezier(.3, 1.7, .5, 1), box-shadow 220ms ease; }
+.s-tile svg { width: 26px; height: 26px; }
+@media (max-width: 480px) { .s-dock { gap: 8px; padding: 10px; } .s-tile { width: 38px; height: 38px; border-radius: 11px; } .s-tile svg { width: 20px; height: 20px; } }
+.s-item:focus-visible .s-tile, .s-item:focus-visible .s-row { box-shadow: 0 0 0 2px var(--accent); }
+.s-item.lifted .s-tile { transform: scale(1.1); box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 16px 26px -8px rgba(15,23,42,.45); }
+.s-line { position: absolute; left: 0; top: 0; pointer-events: none; opacity: 0; transition: transform 200ms cubic-bezier(.3, 1.15, .5, 1), opacity 120ms ease; }
+.s-line i { display: block; width: 100%; height: 100%; border-radius: 1px; background: color-mix(in srgb, var(--fg) 18%, transparent); transition: transform 200ms cubic-bezier(.2, .9, .3, 1); }
+.s-dock .s-line { width: 2px; height: 44px; }
+.s-dock .s-line i { transform: scaleY(0); }
+.s-list .s-line { height: 2px; width: calc(100% - 24px); }
+.s-list .s-line i { transform: scaleX(0); }
+.s-line.on { opacity: 1; }
+.s-line.on i { transform: none; }
+.s-list { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border-radius: 18px; box-shadow: 0 0 0 1px var(--line); }
+.s-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--stage); font-size: 14px; transition: transform 220ms cubic-bezier(.3, 1.6, .5, 1), box-shadow 220ms ease; }
+.s-row .grip { width: 16px; height: 16px; color: var(--faint); flex: none; }
+.s-row small { margin-left: auto; color: var(--muted); font: 12px var(--mono); white-space: nowrap; }
+.s-row .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.s-item.lifted .s-row { transform: scale(.9); box-shadow: 0 16px 30px -10px rgba(15,23,42,.4); background: var(--surface); }
+body.s-dragging, body.s-dragging * { cursor: grabbing !important; user-select: none; }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="004-concentric-radius.html">← 004</a><a href="006-book-card.html">006 →</a></span></nav>
+<section class="tip" id="t005">
+  <div class="tip-h"><span class="no">005</span><h2>更灵动的拖拽排序</h2><a class="src" href="https://x.com/Kubai087/status/2115823717024735708" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">拖动时落点两侧的元素轻轻让开，由近及远依次启动，像真实世界里的推挤。Esc 或拖出列表会取消。</p>
+  <div class="stage">
+    <div class="s-wrap">
+      <div class="s-dock" id="sDock" aria-label="Dock 图标，可拖拽排序">
+        <div class="s-item" tabindex="0" aria-label="文件夹"><div class="s-tile" style="background:linear-gradient(180deg,#5aa2ff,#2f6ff0)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div></div>
+        <div class="s-item" tabindex="0" aria-label="邮件"><div class="s-tile" style="background:linear-gradient(180deg,#6fd0ff,#2a9df0)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg></div></div>
+        <div class="s-item" tabindex="0" aria-label="日历"><div class="s-tile" style="background:linear-gradient(180deg,#ff7a6b,#e8443a)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></div></div>
+        <div class="s-item" tabindex="0" aria-label="音乐"><div class="s-tile" style="background:linear-gradient(180deg,#ff7fae,#e8467e)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></div></div>
+        <div class="s-item" tabindex="0" aria-label="照片"><div class="s-tile" style="background:linear-gradient(180deg,#ffd166,#f4a326)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 8"/></svg></div></div>
+        <div class="s-item" tabindex="0" aria-label="备忘录"><div class="s-tile" style="background:linear-gradient(180deg,#8be38a,#3fb950)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 4h12v16H6zM9 9h6M9 13h6M9 17h3"/></svg></div></div>
+        <div class="s-item" tabindex="0" aria-label="设置"><div class="s-tile" style="background:linear-gradient(180deg,#9aa3b2,#606a7b)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></div></div>
+      </div>
+      <div class="s-list" id="sList" aria-label="任务列表，可拖拽排序">
+        <div class="s-item" tabindex="0"><div class="s-row"><svg class="grip" viewBox="0 0 16 16" fill="currentColor"><circle cx="5.5" cy="4" r="1.2"/><circle cx="10.5" cy="4" r="1.2"/><circle cx="5.5" cy="8" r="1.2"/><circle cx="10.5" cy="8" r="1.2"/><circle cx="5.5" cy="12" r="1.2"/><circle cx="10.5" cy="12" r="1.2"/></svg><span class="dot" style="background:#2f62e9"></span>App Icon 终稿评审<small>周三</small></div></div>
+        <div class="s-item" tabindex="0"><div class="s-row"><svg class="grip" viewBox="0 0 16 16" fill="currentColor"><circle cx="5.5" cy="4" r="1.2"/><circle cx="10.5" cy="4" r="1.2"/><circle cx="5.5" cy="8" r="1.2"/><circle cx="10.5" cy="8" r="1.2"/><circle cx="5.5" cy="12" r="1.2"/><circle cx="10.5" cy="12" r="1.2"/></svg><span class="dot" style="background:#e8443a"></span>修复级联菜单闪烁<small>周四</small></div></div>
+        <div class="s-item" tabindex="0"><div class="s-row"><svg class="grip" viewBox="0 0 16 16" fill="currentColor"><circle cx="5.5" cy="4" r="1.2"/><circle cx="10.5" cy="4" r="1.2"/><circle cx="5.5" cy="8" r="1.2"/><circle cx="10.5" cy="8" r="1.2"/><circle cx="5.5" cy="12" r="1.2"/><circle cx="10.5" cy="12" r="1.2"/></svg><span class="dot" style="background:#3fb950"></span>写 011 期 Prompt<small>周五</small></div></div>
+        <div class="s-item" tabindex="0"><div class="s-row"><svg class="grip" viewBox="0 0 16 16" fill="currentColor"><circle cx="5.5" cy="4" r="1.2"/><circle cx="10.5" cy="4" r="1.2"/><circle cx="5.5" cy="8" r="1.2"/><circle cx="10.5" cy="8" r="1.2"/><circle cx="5.5" cy="12" r="1.2"/><circle cx="10.5" cy="12" r="1.2"/></svg><span class="dot" style="background:#f4a326"></span>Lumno 液态玻璃调参<small>下周</small></div></div>
+        <div class="s-item" tabindex="0"><div class="s-row"><svg class="grip" viewBox="0 0 16 16" fill="currentColor"><circle cx="5.5" cy="4" r="1.2"/><circle cx="10.5" cy="4" r="1.2"/><circle cx="5.5" cy="8" r="1.2"/><circle cx="10.5" cy="8" r="1.2"/><circle cx="5.5" cy="12" r="1.2"/><circle cx="10.5" cy="12" r="1.2"/></svg><span class="dot" style="background:#9aa3b2"></span>整理图标灵感库<small>待定</small></div></div>
+      </div>
+    </div>
+  </div>
+  <ul class="specs"><li>位移 = A × 0.7ⁿ（图标 10px，卡片 8px）</li><li>延迟 = 24ms × n</li><li>插入线 ≈ 文字色 15%，从中间展开</li><li>键盘 ← → / ↑ ↓ 也能排序</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 005 拖拽排序 ---------- */
+function sortable(list, { axis, A }) {
+  const isX = axis === 'x';
+  const line = document.createElement('div');
+  line.className = 's-line';
+  line.innerHTML = '<i></i>';
+  list.appendChild(line);
+  const items = () => $$(':scope > .s-item', list);
+  let st = null;
+
+  function flip(all, mutate) {
+    const first = new Map(all.map(el => [el, el.getBoundingClientRect()]));
+    mutate();
+    all.forEach(el => { el.style.transition = 'none'; el.style.transitionDelay = '0ms'; el.style.transform = ''; });
+    all.forEach(el => {
+      const a = first.get(el), b = el.getBoundingClientRect();
+      el.style.transform = `translate(${a.left - b.left}px, ${a.top - b.top}px)`;
+    });
+    list.offsetWidth;
+    all.forEach(el => { el.style.transition = ''; el.style.transform = ''; });
+  }
+  function begin() {
+    const all = items(), d = all.indexOf(st.it), lr = list.getBoundingClientRect();
+    const rects = all.map(el => {
+      const r = el.getBoundingClientRect();
+      return isX ? { s: r.left - lr.left, z: r.width, c: r.top - lr.top, cz: r.height } : { s: r.top - lr.top, z: r.height, c: r.left - lr.left, cz: r.width };
+    });
+    const gap = all.length > 1 ? rects[1].s - (rects[0].s + rects[0].z) : 0;
+    const close = rects[d].z + gap;
+    // 原位收起后，其余各项的基准位置
+    const base = all.filter(el => el !== st.it).map(el => {
+      const i = all.indexOf(el);
+      return { el, s: rects[i].s - (i > d ? close : 0), z: rects[i].z, off: i > d ? -close : 0 };
+    });
+    Object.assign(st, { started: true, all, d, rects, gap, base, g: -1 });
+    st.it.classList.add('lifted');
+    document.body.classList.add('s-dragging');
+  }
+  function layout() {
+    const { g, d, base, gap, rects } = st, same = g === d;
+    base.forEach((b, j) => {
+      let off = b.off, delay = 0;
+      if (!same && !reduceMotion.matches) {
+        // 离插入线越近，让得越多、动得越早
+        const n = j < g ? g - 1 - j : j - g;
+        off += (j < g ? -1 : 1) * A * Math.pow(.7, n);
+        delay = 24 * n;
+      }
+      b.el.style.transitionDelay = delay + 'ms';
+      b.el.style.transform = isX ? `translateX(${off}px)` : `translateY(${off}px)`;
+    });
+    if (same) { line.classList.remove('on'); return; }
+    let pos;
+    if (g === 0) pos = base[0].s - gap / 2;
+    else if (g === base.length) pos = base[g - 1].s + base[g - 1].z + gap / 2;
+    else pos = (base[g - 1].s + base[g - 1].z + base[g].s) / 2;
+    const r0 = rects[0];
+    const crossPos = isX ? r0.c + (r0.cz - line.offsetHeight) / 2 : 12;
+    const wasOn = line.classList.contains('on');
+    if (!wasOn) line.style.transition = 'none';
+    line.style.transform = isX ? `translate(${pos - 1}px, ${crossPos}px)` : `translate(${crossPos}px, ${pos - 1}px)`;
+    if (!wasOn) { line.offsetWidth; line.style.transition = ''; line.classList.add('on'); }
+  }
+  function move(cx, cy) {
+    const dx = cx - st.x0, dy = cy - st.y0, r = st.rects[st.d];
+    // 抬起：横排时浮到上方，竖排时拉到一侧并缩小，永远不挡住落点
+    st.it.style.transform = isX ? `translate(${dx}px, ${Math.min(dy, 0) - r.cz * .9 - 8}px)` : `translate(${dx + 40}px, ${dy}px)`;
+    const lr = list.getBoundingClientRect(), p = isX ? cx - lr.left : cy - lr.top;
+    const inside = cx > lr.left - 40 && cx < lr.right + 40 && cy > lr.top - (isX ? 140 : 40) && cy < lr.bottom + 40;
+    let g = st.d;
+    if (inside) { g = st.base.length; for (let j = 0; j < st.base.length; j++) if (p < st.base[j].s + st.base[j].z / 2) { g = j; break; } }
+    st.outside = !inside;
+    if (g !== st.g) { st.g = g; layout(); }
+  }
+  function end(commit) {
+    const s = st;
+    st = null;
+    if (!s || !s.started) return;
+    line.classList.remove('on');
+    s.it.classList.remove('lifted');
+    document.body.classList.remove('s-dragging');
+    flip(s.all, () => {
+      // 拖出列表或按 Esc：所有元素弹回原位
+      if (commit && !s.outside && s.g !== s.d && s.g >= 0) list.insertBefore(s.it, s.base[s.g] ? s.base[s.g].el : line);
+    });
+  }
+  list.addEventListener('pointerdown', e => {
+    const it = e.target.closest('.s-item');
+    if (!it || e.button !== 0) return;
+    e.preventDefault();
+    it.focus({ preventScroll: true });
+    it.setPointerCapture(e.pointerId);
+    st = { it, id: e.pointerId, x0: e.clientX, y0: e.clientY, started: false };
+  });
+  list.addEventListener('pointermove', e => {
+    if (!st || e.pointerId !== st.id) return;
+    if (!st.started) { if (Math.hypot(e.clientX - st.x0, e.clientY - st.y0) < 4) return; begin(); }
+    move(e.clientX, e.clientY);
+  });
+  list.addEventListener('pointerup', e => { if (st && e.pointerId === st.id) end(true); });
+  list.addEventListener('pointercancel', () => end(false));
+  addEventListener('keydown', e => { if (e.key === 'Escape' && st && st.started) end(false); });
+  list.addEventListener('keydown', e => {
+    const it = e.target.closest('.s-item');
+    if (!it || st) return;
+    const back = isX ? 'ArrowLeft' : 'ArrowUp', fwd = isX ? 'ArrowRight' : 'ArrowDown';
+    if (e.key !== back && e.key !== fwd) return;
+    e.preventDefault();
+    const all = items(), i = all.indexOf(it), j = i + (e.key === fwd ? 1 : -1);
+    if (j < 0 || j >= all.length) return;
+    flip(all, () => list.insertBefore(it, e.key === fwd ? all[j].nextSibling : all[j]));
+    it.focus({ preventScroll: true });
+  });
+}
+sortable($('#sDock'), { axis: 'x', A: 10 });
+sortable($('#sList'), { axis: 'y', A: 8 });
+</script>
+</body>
+</html>

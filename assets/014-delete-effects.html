@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>014 · 删除特效：燃烧、火焰、碎块、撕贴纸</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 014 删除特效 ---------- */
+/* 列表区：标题在特效画布之上（火焰从它背后经过），卡片在画布之下。卡片不用阴影、不用 line-clamp，快照才能和 DOM 一致 */
+.t014-app {
+  --t014-page: #f2f2f6; --t014-card: #ffffff; --t014-ink: #1c1d21; --t014-mute: #6b6f78; --t014-faint: #a0a4ad;
+  --t014-line: rgb(15 23 42 / .08); --t014-soft: #f1f2f4; --t014-soft-h: #e5e7ea;
+  position: relative; max-width: 480px; height: 600px; margin: 18px auto 0; border-radius: 24px; overflow: hidden;
+  background: var(--t014-page); color: var(--t014-ink); box-shadow: 0 0 0 1px var(--line); font-family: var(--font);
+}
+.t014-app[data-mode="dark"] {
+  --t014-page: #0e0f11; --t014-card: #1c1d21; --t014-ink: #ececef; --t014-mute: #9a9ea7; --t014-faint: #6c7079;
+  --t014-line: rgb(255 255 255 / .07); --t014-soft: #2a2b30; --t014-soft-h: #35373d;
+}
+.t014-view { position: absolute; inset: 0; isolation: isolate; }
+.t014-scroll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px 40px; scrollbar-width: thin; }
+.t014-head { position: relative; z-index: 3; display: flex; align-items: baseline; justify-content: space-between; margin: 4px 2px 16px; }
+.t014-head h3 { margin: 0; font: 700 28px/1.2 var(--font); letter-spacing: -.02em; }
+.t014-head span { font-size: 13px; color: var(--t014-mute); }
+.t014-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.t014-card {
+  position: relative; display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 14px; min-height: 130px;
+  padding: 18px 54px 16px 18px; border-radius: 22px; background-color: var(--t014-card); border: 1px solid var(--t014-line);
+}
+.t014-ico { width: 46px; height: 46px; border-radius: 14px; background: var(--t014-c); color: #fff; display: grid; place-items: center; font: 600 18px/1 var(--font); }
+.t014-card h4 { margin: 1px 0 4px; font: 600 16px/1.4 var(--font); }
+.t014-card p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--t014-mute); }
+.t014-meta { margin-top: 8px; font-size: 12px; line-height: 1.4; color: var(--t014-faint); }
+.t014-del { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: var(--t014-soft); color: var(--t014-mute); display: grid; place-items: center; cursor: pointer; }
+.t014-del:hover { background: var(--t014-soft-h); color: var(--t014-ink); }
+.t014-del svg { width: 16px; height: 16px; }
+.t014-empty { margin: 48px 0 0; text-align: center; color: var(--t014-mute); font-size: 14px; }
+.t014-cv { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; display: none; }
+.t014-ghosts { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 1; pointer-events: none; }
+.t014-ghosts canvas { position: absolute; transform-origin: 50% 50%; }
+.t014-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="013-shockwave-halo.html">← 013</a><a href="015-continuity.html">015 →</a></span></nav>
+<section class="tip" id="t014">
+  <div class="tip-h"><span class="no">014</span><h2>删除特效：燃烧、火焰、碎块、撕贴纸</h2><a class="src" href="https://x.com/Kubai087/status/2119831380276523207" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">点卡片右上角的 × 删除：数据立刻删掉，离场只是一张快照在演出。燃烧从按钮处烧开，火焰从底部把它带走，碎块炸开落到底，贴纸从角上翻起甩出。周围的卡片被火光照亮、被热浪扭曲、被冲开或被拉一下，空位再用弹簧合拢。</p>
+  <div class="stage">
+    <div class="ctrls">
+      <div class="seg" id="t014-fx" role="group" aria-label="效果"><button type="button" data-v="burn" aria-pressed="true">燃烧</button><button type="button" data-v="plume" aria-pressed="false">火焰</button><button type="button" data-v="blocks" aria-pressed="false">碎块</button><button type="button" data-v="peel" aria-pressed="false">撕贴纸</button></div>
+      <div class="seg" id="t014-nb" role="group" aria-label="邻居"><button type="button" data-v="heat" aria-pressed="true">反应 + 热浪</button><button type="button" data-v="react" aria-pressed="false">只反应</button><button type="button" data-v="off" aria-pressed="false">不反应</button></div>
+      <div class="seg" id="t014-mode" role="group" aria-label="模式"><button type="button" data-v="light" aria-pressed="true">浅色</button><button type="button" data-v="dark" aria-pressed="false">深色</button></div>
+      <div class="seg" id="t014-speed" role="group" aria-label="速度"><button type="button" data-v="1" aria-pressed="true">1×</button><button type="button" data-v="0.25" aria-pressed="false">¼×</button></div>
+      <button class="o-btn" type="button" id="t014-undo" disabled>撤销</button>
+      <button class="o-btn" type="button" id="t014-reset">重置</button>
+    </div>
+    <div class="t014-app" id="t014-app" data-mode="light">
+      <div class="t014-view" id="t014-view">
+        <div class="t014-scroll" id="t014-scroll">
+          <div class="t014-head" id="t014-head"><h3>待办</h3><span id="t014-count">8 项</span></div>
+          <ul class="t014-list" id="t014-list" aria-label="待办"></ul>
+          <p class="t014-empty" id="t014-empty" hidden>全部处理完了</p>
+          <div class="t014-ghosts" id="t014-ghosts" aria-hidden="true"></div>
+        </div>
+        <canvas class="t014-cv" id="t014-cv" aria-hidden="true"></canvas>
+      </div>
+      <div class="t014-sr" id="t014-live" aria-live="polite"></div>
+    </div>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="t014-defs"></defs></svg>
+  </div>
+  <ul class="specs"><li>补位弹簧 1−e<sup>−7t</sup>cos 6t · 520ms</li><li>补位起点 900 / 720 / 240 / 640ms</li><li>燃烧 2s · 前沿 1.15s</li><li>火焰 1.4s · 0.84s 到顶</li><li>碎块 36 / 18 / 9px · g 2300</li><li>贴纸 r 20 · 0.62s 脱落 · f 1400</li><li>同时 ≤3 · 其余淡出 220ms</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 014 删除特效 ---------- */
+/* 删除时同步拍快照（2D canvas 重画：圆角、背景、边框、SVG 路径、逐字文字），数据立即删掉；
+   一张 WebGL2 画布盖在滚动视口上画离场：Burn / Plume 是逐像素着色器，Peel 是 CPU 网格，Blocks 和粒子是批量四边形。
+   邻居的位移、火光和热浪（SVG 滤镜）作用在真实卡片上；补位是挂在每张卡片上的 FLIP 弹簧偏移。所有时间走一个可慢放的虚拟时钟。 */
+(() => {
+  const app = $('#t014-app'), sc = $('#t014-scroll'), view = $('#t014-view'), list = $('#t014-list'), cv = $('#t014-cv'),
+        head = $('#t014-head'), ghosts = $('#t014-ghosts'), defs = $('#t014-defs'), live = $('#t014-live'),
+        empty = $('#t014-empty'), count = $('#t014-count'), undoBtn = $('#t014-undo'), resetBtn = $('#t014-reset');
+  const DATA = [
+    ['设', '设计评审：首页改版', '周三下午和品牌组过一遍新版首屏和定价区。', '今天 14:00 · 设计', '#6d7cff'],
+    ['账', '报销单待提交', '十月差旅 3 张发票，周五前交给财务。', '明天 · 财务', '#f08a3e'],
+    ['修', '修复登录页闪白', 'Safari 下切换深色模式时，背景会闪一帧白。', '进行中 · 工程', '#e0559b'],
+    ['读', '读完《设计中的设计》', '还剩最后两章，读完整理一页笔记。', '本周 · 阅读', '#3aa857'],
+    ['约', '预约牙医复查', '上次说半年后复查，记得带上医保卡。', '11月20日 · 生活', '#2aa3c2'],
+    ['写', '写周报', '本周上线了搜索改版和两项性能优化。', '周五 · 工作', '#8a6cf0'],
+    ['买', '买咖啡豆', '耶加雪菲浅烘，顺便补一包滤纸。', '周末 · 生活', '#c99a2e'],
+    ['备', '备份照片库', '把 2025 年的照片同步到外置硬盘。', '随时 · 生活', '#e2564b'],
+  ].map(([g, t, s, m, c], i) => ({ id: i + 1, g, t, s, m, c }));
+  const DUR = { burn: 2, plume: 1.4, blocks: 1.5, peel: 1.2, fade: .22 };        // 画面时长（s）
+  const LIFE = { burn: 2, plume: 1.4, blocks: 1.5, peel: 1.45, fade: .22 };       // 含邻居回弹的总时长
+  const GAP = { burn: .9, plume: .72, blocks: .24, peel: .64, fade: .22 };        // 补位开始时间
+  const st = { fx: 'burn', nb: 'heat', dark: false, speed: 1 };
+  let items = [], effects = [], undoStack = [], vnow = 0, last = 0, raf = 0, uid = 0;
+  const offsets = new Map(), styled = new Set(), heatF = new Map();
+  const F32 = Float32Array, NS = 'http://www.w3.org/2000/svg';
+  const sstep = (a, b, v) => { const t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); };
+  const px = v => `${v.toFixed(2)}px`;
+
+  /* ---- 列表 ---- */
+  const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  function cardEl(it) {
+    const li = document.createElement('li');
+    li.className = 't014-card'; li.style.setProperty('--t014-c', it.c); li._it = it;
+    li.innerHTML = `<span class="t014-ico" aria-hidden="true">${it.g}</span><div><h4>${esc(it.t)}</h4><p>${esc(it.s)}</p><div class="t014-meta">${esc(it.m)}</div></div><button type="button" class="t014-del" aria-label="删除「${esc(it.t)}」"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></button>`;
+    return li;
+  }
+  function sync() { count.textContent = `${items.length} 项`; empty.hidden = items.length > 0; undoBtn.disabled = !undoStack.length; }
+
+  /* ---- 快照：同步重画到 2D canvas，第一帧和 DOM 一致 ---- */
+  const alphaOf = c => { const m = c.match(/[\d.]+/g); return !m ? 0 : m.length > 3 ? +m[3] : 1; };
+  function snapshot(card) {
+    const r = card.getBoundingClientRect(), w = r.width, h = r.height, s = Math.min(3, Math.max(2, devicePixelRatio || 1));
+    const c = document.createElement('canvas'); c.width = Math.round(w * s); c.height = Math.round(h * s);
+    const x = c.getContext('2d'); x.scale(s, s);
+    const rad = Math.min(parseFloat(getComputedStyle(card).borderTopLeftRadius) || 0, w / 2, h / 2);
+    x.beginPath(); x.roundRect(0, 0, w, h, rad); x.clip();
+    for (const el of [card, ...card.querySelectorAll('*')]) {
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility !== 'visible') continue;
+      const b = el.getBoundingClientRect(), bx = b.left - r.left, by = b.top - r.top;
+      if (el instanceof SVGSVGElement) { drawSvg(x, el, bx, by, b.width, b.height); continue; }
+      if (el instanceof SVGElement) continue;
+      const er = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, b.width / 2, b.height / 2), bw = parseFloat(cs.borderTopWidth) || 0;
+      if (alphaOf(cs.backgroundColor) > 0) { x.fillStyle = cs.backgroundColor; x.beginPath(); x.roundRect(bx, by, b.width, b.height, er); x.fill(); }
+      if (bw > 0 && alphaOf(cs.borderTopColor) > 0) { x.strokeStyle = cs.borderTopColor; x.lineWidth = bw; x.beginPath(); x.roundRect(bx + bw / 2, by + bw / 2, b.width - bw, b.height - bw, Math.max(0, er - bw / 2)); x.stroke(); }
+    }
+    // 文字逐字取 Range 矩形，按字体上沿定基线；整行 fillText 会累积字宽误差
+    const tw = document.createTreeWalker(card, NodeFilter.SHOW_TEXT), rg = document.createRange();
+    for (let n; (n = tw.nextNode());) {
+      const p = n.parentElement;
+      if (!n.data.trim() || p.closest('svg')) continue;
+      const cs = getComputedStyle(p);
+      x.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`; x.fillStyle = cs.color;
+      const m = x.measureText('国Hg'), asc = m.fontBoundingBoxAscent, desc = m.fontBoundingBoxDescent;
+      let i = 0;
+      for (const ch of n.data) {
+        const len = ch.length; rg.setStart(n, i); rg.setEnd(n, i + len); i += len;
+        if (!ch.trim()) continue;
+        const b = rg.getBoundingClientRect(); if (!b.width) continue;
+        x.fillText(ch, b.left - r.left, b.top - r.top + (b.height - asc - desc) / 2 + asc);
+      }
+    }
+    return { c, w, h, rad };
+  }
+  function drawSvg(x, svg, bx, by, bw, bh) {
+    const vb = svg.viewBox.baseVal;
+    x.save(); x.translate(bx, by); x.scale(bw / vb.width, bh / vb.height);
+    for (const p of svg.querySelectorAll('path')) {
+      const cs = getComputedStyle(p), path = new Path2D(p.getAttribute('d')), col = v => /^currentcolor$/i.test(v) ? cs.color : v;
+      if (cs.fill !== 'none') { x.fillStyle = col(cs.fill); x.fill(path); }
+      if (cs.stroke !== 'none') { x.strokeStyle = col(cs.stroke); x.lineWidth = parseFloat(cs.strokeWidth) || 1; x.lineCap = cs.strokeLinecap; x.lineJoin = cs.strokeLinejoin; x.stroke(path); }
+    }
+    x.restore();
+  }
+
+  /* ---- 噪声与场（和着色器同一套，用来算粒子在什么时候被前沿点燃） ---- */
+  const fr = v => v - Math.floor(v);
+  function hash(px_, py) { let a = fr(px_ * .1031), b = fr(py * .1031), c = a; const d = a * (b + 33.33) + b * (c + 33.33) + c * (a + 33.33); a += d; b += d; c += d; return fr((a + b) * c); }
+  function noise(x, y) {
+    const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    const a = hash(ix, iy), b = hash(ix + 1, iy), c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1), top = a + (b - a) * ux;
+    return top + (c + (d - c) * ux - top) * uy;
+  }
+  function fbm(x, y) { let s = 0, a = .5; for (let i = 0; i < 5; i++) { s += a * noise(x, y); x = x * 2.03 + 17.1; y = y * 2.03 + 17.1; a *= .5; } return s / .96875; }
+  const fieldF = (e, x, y) => Math.hypot(x - e.click.x, (y - e.click.y) * 1.15) / e.maxD + (fbm(x * .018, y * .018) - .5) * .42
+    + (fbm(x * .085, y * .085) - .5) * .05 - sstep(.6, .78, fbm(x * .03 + 40, y * .03 + 40)) * .12;
+  function sdItem(e, x, y) { const hx = e.w / 2, hy = e.h / 2, r = e.rad, qx = Math.abs(x - hx) - hx + r, qy = Math.abs(y - hy) - hy + r; return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r; }
+
+  /* ---- WebGL2 ---- */
+  const HEAD = `#version 300 es
+precision highp float;
+uniform vec2 u_res; uniform vec4 u_rect; uniform float u_t, u_k, u_dark, u_rad, u_maxD; uniform vec2 u_click;
+float hash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float noise(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
+  return mix(mix(hash(i), hash(i + vec2(1., 0.)), u.x), mix(hash(i + vec2(0., 1.)), hash(i + vec2(1., 1.)), u.x), u.y); }
+float fbm(vec2 p) { float s = 0., a = .5; for (int i = 0; i < 5; i++) { s += a * noise(p); p = p * 2.03 + 17.1; a *= .5; } return s / .96875; }
+float coarseF(vec2 p) { return length((p - u_click) * vec2(1., 1.15)) / u_maxD + (fbm(p * .018) - .5) * .42; }
+float fieldF(vec2 p) { return coarseF(p) + (fbm(p * .085) - .5) * .05 - smoothstep(.6, .78, fbm(p * .03 + 40.)) * .12; }
+float sdItem(vec2 p) { vec2 h = u_rect.zw * .5, q = abs(p - h) - h + u_rad; return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - u_rad; }
+vec4 toClip(vec2 s) { return vec4(s.x / u_res.x * 2. - 1., 1. - s.y / u_res.y * 2., 0., 1.); }
+float burnLevel() { return u_t / 1.15 * 1.4 - .1; }
+`;
+  const V_QUAD = `layout(location = 0) in vec2 a_p; out vec2 v_p;
+void main() { v_p = a_p; gl_Position = toClip(u_rect.xy + a_p); }`;
+  // Burn：纸是 6px 网格，靠近前沿的部分背离点击处后缩、上抬
+  const V_PAPER = `layout(location = 0) in vec2 a_p; out vec2 v_p; out float v_lift;
+void main() {
+  float lift = pow(clamp(1. - (fieldF(a_p) - burnLevel()) / .1, 0., 1.), 2.);
+  vec2 dv = a_p - u_click, dir = dv / max(length(dv), 1.);
+  vec2 pos = a_p + dir * 9. * u_k * lift - vec2(0., 12. * u_k * lift * lift);
+  v_p = a_p; v_lift = lift; gl_Position = toClip(u_rect.xy + pos);
+}`;
+  const F_GLOW = `in vec2 v_p; out vec4 o;
+void main() {
+  float level = burnLevel(), d = fieldF(v_p) - level, sd = sdItem(v_p);
+  float near = sd <= 0. ? 1. : exp(-sd / 26.);
+  float a = exp(-abs(d) / .07) * near * .3 * (1. - smoothstep(1.1, 1.3, level));
+  o = vec4(vec3(1., .62, .22) * a, a);
+}`;
+  const F_PAPER = `uniform sampler2D u_tex; in vec2 v_p; in float v_lift; out vec4 o;
+void main() {
+  vec4 s = texture(u_tex, v_p / u_rect.zw); if (s.a < .003) discard;
+  vec3 c = s.rgb / s.a;
+  float d = fieldF(v_p) - burnLevel();
+  c = mix(c, vec3(.82, .76, .68), v_lift * .6);
+  c = mix(c, vec3(.969, .761, .4), .55 * smoothstep(.17, .05, d));
+  c = mix(c, vec3(.42, .2, .071), smoothstep(.06, .008, d));
+  vec3 blk = mix(vec3(.051, .035, .031), vec3(.227, .196, .18), u_dark * .6);
+  c = mix(c, blk, smoothstep(.012, -.006, d));
+  float cd = d + (noise(v_p * .05) - .5) * .014;
+  vec3 charEnd = mix(vec3(.169, .122, .102), vec3(.227, .196, .18), u_dark);
+  if (cd < 0.) c = mix(blk, charEnd, clamp(-cd / .05, 0., 1.));
+  float fl = .72 + .28 * noise(v_p * .02 + vec2(0., u_t * 1.5));
+  float wo = d > 0. ? .05 : .012, wg = d > 0. ? .024 : .006;
+  c = mix(c, vec3(1., .439, .051), .92 * exp(-(d / wo) * (d / wo)) * fl);
+  c = mix(c, vec3(1., .8, .259), .95 * exp(-(d / wg) * (d / wg)) * fl);
+  c = mix(c, vec3(1., .98, .839), exp(-(d / .008) * (d / .008)) * fl);
+  float sp = smoothstep(.78, .84, noise(v_p * .17)) * smoothstep(.01, .03, d) * (1. - smoothstep(.12, .16, d));
+  c = mix(c, vec3(1., .722, .251), clamp(sp * (.6 + .4 * sin(18. * u_t + noise(v_p * .05) * 30.)), 0., 1.));
+  c = mix(c, vec3(.741, .702, .659), .85 * (1. - smoothstep(.0028, .0038, abs(cd + .05))));
+  float edge = cd + .0538, alive = clamp(edge / max(fwidth(edge), 1e-5) + .5, 0., 1.);
+  float a = s.a * alive; o = vec4(c * a, a);
+}`;
+  const F_FLAME = `in vec2 v_p; out vec4 o;
+void main() {
+  vec2 p = v_p; float t = u_t, level = burnLevel();
+  float n1 = noise(vec2(p.x * .045 + .6 * t, p.y * .02 + 6. * t));
+  float n2 = noise(vec2(p.x * .11 + 5., p.y * .05 + 9. * t));
+  float tall = (16. + 72. * smoothstep(.32, .8, n1)) * u_k, fl = 0.;
+  for (int i = 0; i < 5; i++) {
+    float s = tall * float(i) / 4.; vec2 q = p + vec2(0., s);
+    float on = smoothstep(2., -6., sdItem(q));
+    if (on <= 0.) continue;
+    float cf = (coarseF(q) - level) / .042;
+    fl += exp(-cf * cf) * (1. - smoothstep(0., tall, s)) * .5 * on;
+  }
+  fl = min(fl, 1.) * smoothstep(.2, .62, n1 * .7 + n2 * .3);
+  vec3 c = mix(vec3(1., .42, .071), vec3(1., .761, .2), smoothstep(.2, .55, fl));
+  c = mix(c, vec3(1., .98, .839), smoothstep(.55, .9, fl));
+  float a = smoothstep(.03, .62, fl) * .95; o = vec4(c * a, a);
+}`;
+  // Plume：纸从下往上被吸进火焰根部
+  const F_PPAPER = `uniform sampler2D u_tex; in vec2 v_p; out vec4 o;
+void main() {
+  vec2 p = v_p; float t = u_t, w = u_rect.z, h = u_rect.w;
+  float pr = smoothstep(0., 1., clamp((t - .04) / .8, 0., 1.));
+  float xn = p.x / w * 2. - 1.;
+  float lead = 80. * u_k * sin(3.14159 * pr) * (1. - xn * xn);
+  float wander = (noise(vec2(p.x * .025, t * 2.2)) - .5) * 34. * u_k;
+  float dl = mix(h + 30. * u_k, -30. * u_k, pr) - lead + wander - p.y;
+  if (dl < 0.) discard;
+  float a0 = (1. - clamp(dl / (90. * u_k), 0., 1.)) * smoothstep(0., .16, t), mid = w * .5;
+  vec2 src = vec2(mid + (p.x - mid) / (1. - .2 * a0) + sin(p.y * .09 + t * 16.) * 3. * a0, p.y + 20. * u_k * a0);
+  if (src.x < 0. || src.x > w || src.y > h) discard;
+  vec4 s = texture(u_tex, src / u_rect.zw); if (s.a < .003) discard;
+  vec3 c = mix(s.rgb / s.a, vec3(1., .831, .678), a0 * a0 * .9);
+  float a = s.a * smoothstep(0., 10. * u_k, dl); o = vec4(c * a, a);
+}`;
+  const F_PFLAME = `in vec2 v_p; out vec4 o;
+uniform vec4 u_pl;   // 根部 y、高度、半宽、gone
+vec2 voro(vec2 q, float t) {
+  vec2 i = floor(q), f = fract(q); float d1 = 9., d2 = 9.;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(float(x), float(y)), h = vec2(hash(i + g), hash(i + g + 19.19));
+    float an = 3.2 * t + 6.2832 * h.x;
+    float d = length(g + .5 + .36 * (.6 + .4 * h.y) * vec2(cos(an), sin(an)) - f);
+    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+  }
+  return vec2(d1, d2);
+}
+void main() {
+  vec2 p = v_p; float t = u_t, gone = u_pl.w, H = u_pl.y, hw = u_pl.z;
+  float mid = u_rect.z * .5, up = u_pl.x - p.y, upc = max(up, 0.);
+  float spread = mix(.75, .32, gone);
+  float sway = (sin(3.6 * t + upc * .012) * upc * .08 + sin(6.1 * t + upc * .03) * upc * .03) * (1. + 1.2 * gone);
+  float fan = (p.x - mid - sway) / (hw + upc * spread);
+  float c1 = 1. - abs(sin(fan * 3.4 + 2.6 * t + sin(1.7 * t)));
+  float c2 = 1. - abs(sin(fan * 7.1 - 4. * t + 1.3));
+  float rel = (up / H) / (.86 + .5 * c1 * c1 + .18 * c2 * c2);
+  vec2 q = vec2(fan * 2.4, pow(max(up + 20., 0.), .8) * .02 - 2.6 * t);
+  q += (vec2(noise(q * 1.3 + vec2(0., t)), noise(q * 1.3 + vec2(7.3, -t))) - .5) * 1.16;
+  vec2 v = voro(q, t);
+  float m = 1. - length(vec2(fan, rel)) - (v.x - .35) * .3;
+  m -= gone * (1.25 - .55 * rel) * (.55 + .45 * noise(p * .03 + vec2(0., t * 2.)));
+  float body = smoothstep(0., .05, m) * smoothstep(0., 1., (up + 14. - v.x * 46.) / 12.);
+  vec3 col = mix(vec3(.98, .6, .659), vec3(1., .659, .341), smoothstep(.3, .7, noise(p * .014 + vec2(t * .3, -t * 1.4))));
+  col = mix(col, vec3(1., .8, .639), (1. - smoothstep(.05, .45, v.x)) * .55);
+  col = mix(col, vec3(1., .941, .62), smoothstep(.075, .04, v.y - v.x) * .85);
+  col = mix(col, vec3(1., .969, .839), smoothstep(.55, .05, rel) * smoothstep(0., .3, m) * .9);
+  float ha = (u_dark > .5 ? .2 : .3) * exp(min(m, 0.) * 4.) * smoothstep(-30., 10., up) * (1. - body);
+  o = vec4(col * body + vec3(1., .722, .561) * ha, body + ha) * (1. - smoothstep(1.22, 1.4, t));
+}`;
+  const F_GLUE = `in vec2 v_p; out vec4 o; uniform vec2 u_dir, u_corner; uniform float u_L, u_glue;
+void main() {
+  if (sdItem(v_p) > 0. || dot(v_p - u_corner, u_dir) > u_L) discard;
+  o = vec4(u_glue * (.35 + .65 * hash(floor(v_p / 2.))));
+}`;
+  const V_SPRITE = `layout(location = 0) in vec2 a_s; layout(location = 1) in vec2 a_uv; layout(location = 2) in vec2 a_loc;
+layout(location = 3) in vec4 a_col; layout(location = 4) in vec2 a_ka;
+out vec2 v_uv; out vec2 v_loc; out vec4 v_col; out vec2 v_ka;
+void main() { v_uv = a_uv; v_loc = a_loc; v_col = a_col; v_ka = a_ka; gl_Position = toClip(a_s); }`;
+  // kind 0 碎块（col = 闪白、alpha、宽、高；aux = 明度，<0 为原样）；1 火星；2 碎屑；3 柔边椭圆
+  const F_SPRITE = `uniform sampler2D u_tex; in vec2 v_uv; in vec2 v_loc; in vec4 v_col; in vec2 v_ka; out vec4 o;
+void main() {
+  float kind = v_ka.x, aux = v_ka.y; vec2 q = v_loc * 2. - 1.; float r = length(q);
+  if (kind < .5) {
+    vec4 s = texture(u_tex, v_uv); if (s.a < .003) discard;
+    vec3 c = s.rgb / s.a;
+    if (aux >= 0.) {
+      vec2 sz = v_col.zw, lp = v_loc * sz;
+      float dk = .36 * clamp(1. - min(sz.x - lp.x, sz.y - lp.y) / 5., 0., 1.);
+      float edge = 1. - step(1., min(min(lp.x, lp.y), min(sz.x - lp.x, sz.y - lp.y)));
+      c = mix(c * aux * (1. - dk), vec3(0.), .2 * edge);
+    }
+    c = mix(c, vec3(1.), v_col.x);
+    float a = s.a * v_col.y; o = vec4(c * a, a); return;
+  }
+  float a;
+  if (kind < 1.5) { a = smoothstep(1., .15, r) * v_col.a; o = vec4(mix(v_col.rgb, vec3(1., .97, .86), smoothstep(.55, 0., r)) * a, a); return; }
+  if (kind < 2.5) { float an = atan(q.y, q.x), rr = .78 + .22 * sin(an * 3. + aux * 20.) * sin(an * 5. - aux * 13.); a = (1. - smoothstep(rr - .12, rr, r)) * v_col.a; o = vec4(v_col.rgb * a, a); return; }
+  a = smoothstep(1., .25, r) * v_col.a; o = vec4(v_col.rgb * a, a);
+}`;
+  const V_PEEL = `layout(location = 0) in vec2 a_s; layout(location = 1) in vec2 a_p; layout(location = 2) in float a_th;
+out vec2 v_p; out float v_th;
+void main() { v_p = a_p; v_th = a_th; gl_Position = toClip(a_s); }`;
+  const F_PEEL = `uniform sampler2D u_tex; uniform vec2 u_dir, u_corner; uniform float u_L, u_alpha, u_stuck; uniform vec3 u_back;
+in vec2 v_p; in float v_th; out vec4 o;
+void main() {
+  float th = v_th; vec3 n = vec3(u_dir * sin(th), cos(th)); bool back = n.z < 0.; if (back) n = -n;
+  vec3 L = normalize(vec3(-.35, -.55, .76));
+  float diff = .74 + .26 * max(dot(n, L), 0.) / L.z;
+  float spec = pow(max(dot(n, normalize(L + vec3(0., 0., 1.))), 0.), 24.) * .14 * smoothstep(0., .5, th);
+  float rim = pow(1. - abs(n.z), 5.) * .5;
+  vec3 base; float a;
+  if (back) { float sd = sdItem(v_p); base = sd > -6. ? vec3(1.) : u_back; a = clamp(.5 - sd, 0., 1.); }
+  else { vec4 s = texture(u_tex, v_p / u_rect.zw); if (s.a < .003) discard; base = s.rgb / s.a; a = s.a; }
+  float crease = u_stuck * .16 * (1. - smoothstep(0., 16., dot(v_p - u_corner, u_dir) - u_L));
+  vec3 c = min(base * diff * (1. - crease) + spec + rim, 1.);
+  a *= u_alpha; o = vec4(c * a, a);
+}`;
+  const V_SHADOW = `layout(location = 0) in vec2 a_s; layout(location = 1) in float a_v; out float v_v;
+void main() { v_v = a_v; gl_Position = toClip(a_s); }`;
+  const F_SHADOW = `in float v_v; out vec4 o; void main() { o = vec4(v_v); }`;
+  const V_FULL = `layout(location = 0) in vec2 a_p; out vec2 v_uv; void main() { v_uv = a_p * .5 + .5; gl_Position = vec4(a_p, 0., 1.); }`;
+  const F_BLUR = `uniform sampler2D u_tex; uniform vec2 u_step; in vec2 v_uv; out vec4 o;
+void main() { float s = 0., ws = 0.; for (int i = -6; i <= 6; i++) { float x = float(i), w = exp(-x * x / 11.52); s += texture(u_tex, v_uv + u_step * x).r * w; ws += w; } o = vec4(s / ws); }`;
+  const F_COMP = `uniform sampler2D u_tex; uniform float u_alpha; in vec2 v_uv; out vec4 o;
+void main() { o = vec4(0., 0., 0., texture(u_tex, v_uv).r * u_alpha); }`;
+
+  let gl = null, glState = 'idle', P = {}, sbuf = null, fbo = null, W = 0, H = 0;
+  function mk(vs, fs) {
+    const p = gl.createProgram();
+    for (const [type, src] of [[gl.VERTEX_SHADER, HEAD + vs], [gl.FRAGMENT_SHADER, HEAD + fs]]) {
+      const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      gl.attachShader(p, s);
+    }
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {};
+    for (let i = 0, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i < n; i++) { const nm = gl.getActiveUniform(p, i).name; u[nm] = gl.getUniformLocation(p, nm); }
+    return { p, u };
+  }
+  function glOK() {
+    if (glState === 'ok') return true;
+    if (glState !== 'idle') return false;
+    try {
+      gl = gl || cv.getContext('webgl2', { premultipliedAlpha: true, antialias: true });
+      if (!gl) throw new Error('no webgl2');
+      P = { glow: mk(V_QUAD, F_GLOW), paper: mk(V_PAPER, F_PAPER), flame: mk(V_QUAD, F_FLAME), ppaper: mk(V_QUAD, F_PPAPER), pflame: mk(V_QUAD, F_PFLAME),
+            glue: mk(V_QUAD, F_GLUE), sprite: mk(V_SPRITE, F_SPRITE), peel: mk(V_PEEL, F_PEEL), shadow: mk(V_SHADOW, F_SHADOW), blur: mk(V_FULL, F_BLUR), comp: mk(V_FULL, F_COMP) };
+      gl.bindVertexArray(gl.createVertexArray());
+      sbuf = gl.createBuffer();
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      glState = 'ok'; return true;
+    } catch (err) { console.warn('014：WebGL2 不可用，退回淡出', err); glState = 'fail'; return false; }
+  }
+  // 上下文丢失：正在跑的特效原地改成淡出
+  cv.addEventListener('webglcontextlost', ev => {
+    ev.preventDefault(); glState = 'lost'; fbo = null; cv.style.display = 'none';
+    for (const e of effects) if (e.kind !== 'fade') { e.kind = 'fade'; e.start = vnow; startFade(e); }
+  });
+  cv.addEventListener('webglcontextrestored', () => { glState = 'idle'; });
+
+  function sizeCanvas() {
+    const w = view.clientWidth, h = view.clientHeight, d = Math.min(2, devicePixelRatio || 1), cw = Math.round(w * d), ch = Math.round(h * d);
+    if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; if (fbo) { fbo.t.forEach(t => gl.deleteTexture(t)); fbo.f.forEach(f => gl.deleteFramebuffer(f)); fbo = null; } }
+    W = w; H = h;
+  }
+  function attribs(layout) {
+    const stride = layout.reduce((s, [, n]) => s + n, 0) * 4; let off = 0;
+    for (let i = 0; i < 5; i++) gl.disableVertexAttribArray(i);
+    for (const [loc, n] of layout) { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, stride, off); off += n * 4; }
+  }
+  function stream(data, layout) { gl.bindBuffer(gl.ARRAY_BUFFER, sbuf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW); attribs(layout); }
+  function use(pr, e, t, extra = {}, tex) {
+    gl.useProgram(pr.p); const u = pr.u;
+    if (u.u_res) gl.uniform2f(u.u_res, W, H);
+    if (e) {
+      if (u.u_rect) gl.uniform4f(u.u_rect, e.x, e.y - sc.scrollTop, e.w, e.h);
+      if (u.u_t) gl.uniform1f(u.u_t, t);
+      if (u.u_k) gl.uniform1f(u.u_k, e.k);
+      if (u.u_dark) gl.uniform1f(u.u_dark, st.dark ? 1 : 0);
+      if (u.u_rad) gl.uniform1f(u.u_rad, e.rad);
+      if (u.u_maxD) gl.uniform1f(u.u_maxD, e.maxD);
+      if (u.u_click) gl.uniform2f(u.u_click, e.click.x, e.click.y);
+      tex = tex || e.tex;
+    }
+    if (u.u_tex && tex) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(u.u_tex, 0); }
+    for (const k in extra) if (u[k]) { const v = extra[k]; Array.isArray(v) ? gl[`uniform${v.length}f`](u[k], ...v) : gl.uniform1f(u[k], v); }
+  }
+  function quad(x0, y0, x1, y1) { stream(new F32([x0, y0, x1, y0, x1, y1, x0, y0, x1, y1, x0, y1]), [[0, 2]]); gl.drawArrays(gl.TRIANGLES, 0, 6); }
+  function full() { stream(new F32([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), [[0, 2]]); gl.drawArrays(gl.TRIANGLES, 0, 6); }
+  function texParams() { for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v); }
+  function texFrom(canvas) {
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);    // 预乘上传；着色器里改色前先反预乘
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    texParams(); return t;
+  }
+  // 批量四边形：每顶点 位置2 + uv2 + 局部2 + 颜色4 + (kind, aux)2
+  const CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]];
+  function sprite(v, cx, cy, hw, hh, rot, col, kind, aux, uv = [0, 0, 1, 1]) {
+    const c = Math.cos(rot), s = Math.sin(rot);
+    for (const [lx, ly] of CORNERS) {
+      const x = lx * hw, y = ly * hh, u = (lx + 1) / 2, w = (ly + 1) / 2;
+      v.push(cx + x * c - y * s, cy + x * s + y * c, uv[0] + (uv[2] - uv[0]) * u, uv[1] + (uv[3] - uv[1]) * w, u, w, col[0], col[1], col[2], col[3], kind, aux);
+    }
+  }
+  function drawSprites(v, e) { if (!v.length) return; use(P.sprite, e, 0); stream(new F32(v), [[0, 2], [1, 2], [2, 2], [3, 4], [4, 2]]); gl.drawArrays(gl.TRIANGLES, 0, v.length / 12); }
+
+  /* ---- 各效果的准备 ---- */
+  function lively(hex) {   // 贴纸背面：分类色饱和度 ×1.5、混 12% 白、明度 ×1.06
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; let h = 0, s = 0;
+    if (mx !== mn) { const d = mx - mn; s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); h = (mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) / 6; }
+    s = Math.min(1, s * 1.5);
+    const q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    const hue = t => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < .5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+    return [hue(h + 1 / 3), hue(h), hue(h - 1 / 3)].map(c => Math.min(1, (c + (1 - c) * .12) * 1.06));
+  }
+  function setupGL(e) {
+    e.tex = texFrom(e.snap.c);
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    if (e.kind === 'burn') {
+      const nx = Math.ceil(e.w / 6), ny = Math.ceil(e.h / 6), v = new F32((nx + 1) * (ny + 1) * 2), idx = new Uint16Array(nx * ny * 6);
+      for (let j = 0, k = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) { v[k++] = Math.min(i * 6, e.w); v[k++] = Math.min(j * 6, e.h); }
+      for (let j = 0, k = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, c = a + nx + 1; idx.set([a, a + 1, c + 1, a, c + 1, c], k); k += 6; }
+      e.mbuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, e.mbuf); gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+      e.ibuf = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, e.ibuf); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW); e.icount = idx.length;
+      e.parts = Array.from({ length: 64 }, () => {
+        let x, y; do { x = Math.random() * e.w; y = Math.random() * e.h; } while (sdItem(e, x, y) > -1);
+        const spark = Math.random() < .8;
+        return { x, y, ts: (fieldF(e, x, y) + .1) / 1.4 * 1.15, life: rnd(.5, 1.2), spark, size: spark ? rnd(2.5, 4.5) : rnd(3, 8),
+                 rise: rnd(60, 240) * (spark ? 1.2 : .8) * e.k, dir: Math.random() < .5 ? -1 : 1, seed: Math.random() };
+      });
+    } else if (e.kind === 'plume') {
+      e.pieces = Array.from({ length: 6 }, (_, i) => ({ ts: .25 + i * .13, life: rnd(.55, .85), size: 26 - i * 4, rise: rnd(120, 240), ox: rnd(-.5, .5), oy: rnd(.45, .8), sway: rnd(-15, 15), col: Math.random() < .5 ? [.98, .6, .66] : [1, .66, .34] }));
+      e.dots = Array.from({ length: 44 }, () => ({ ts: rnd(.15, .85), life: rnd(.45, .8), size: rnd(4, 12), rise: rnd(60, 200), ox: rnd(-1, 1), oy: rnd(0, .6), sway: rnd(-12, 12) }));
+    } else if (e.kind === 'blocks') {
+      const cx = e.w / 2, cy = e.h / 2, maxR = Math.hypot(cx, cy), floor = sc.scrollTop + sc.clientHeight - e.y;   // 条目坐标里的「可见列表底边」
+      e.chunks = [];
+      for (let gy = 0; gy < e.h; gy += 36) for (let gx = 0; gx < e.w; gx += 36) {
+        const r = Math.random(), sz = r < .35 ? 36 : r < .8 ? 18 : 9;
+        for (let y = gy; y < Math.min(gy + 36, e.h); y += sz) for (let x = gx; x < Math.min(gx + 36, e.w); x += sz) {
+          const w = Math.min(sz, e.w - x, gx + 36 - x), h = Math.min(sz, e.h - y, gy + 36 - y), fx = x + w / 2, fy = y + h / 2;
+          if (sdItem(e, fx, fy) > Math.min(w, h) * .3) continue;          // 圆角外面的空块不要
+          const an = Math.random() * 6.2832, jr = Math.random() * 20;
+          let dx = (fx - cx) + Math.cos(an) * jr, dy = (fy - cy - 14) * 2.2 + Math.sin(an) * jr; const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+          const sp = (200 + Math.random() * 400 + 220 * (1 - Math.hypot(fx - cx, fy - cy) / maxR)) * (1.25 - sz / 72);
+          e.chunks.push({ x: fx, y: fy, w, h, vx: dx * sp, vy: dy * sp - 430, rot: 0, spin: rnd(-6, 6), delay: Math.random() * .03, shade: rnd(.92, 1),
+                          floor: floor - Math.random() * 26, bounced: false, rest: false, fadeAt: rnd(.95, 1.25), uv: [x / e.w, y / e.h, (x + w) / e.w, (y + h) / e.h] });
+        }
+      }
+      e.simT = .07;
+    } else if (e.kind === 'peel') {
+      // 控件在右上：从右上角出发，沿 normalize(−0.55, 1)；控件在左侧时镜像
+      const left = e.click.x < e.w / 2, l = Math.hypot(.55, 1);
+      e.corner = { x: left ? 0 : e.w, y: 0 }; e.dir = { x: (left ? .55 : -.55) / l, y: 1 / l };
+      e.reach = Math.max(...[[0, 0], [e.w, 0], [0, e.h], [e.w, e.h]].map(([x, y]) => (x - e.corner.x) * e.dir.x + (y - e.corner.y) * e.dir.y));
+      e.back = lively(e.color);
+      e.nx = Math.ceil(e.w / 5); e.ny = Math.ceil(e.h / 5);
+      const n = (e.nx + 1) * (e.ny + 1); e.gx = new F32(n); e.gy = new F32(n);
+      for (let j = 0, k = 0; j <= e.ny; j++) for (let i = 0; i <= e.nx; i++, k++) { e.gx[k] = Math.min(i * 5, e.w); e.gy[k] = Math.min(j * 5, e.h); }
+    }
+  }
+  function freeGL(e) {
+    if (glState !== 'ok') return;
+    for (const b of [e.mbuf, e.ibuf]) if (b) gl.deleteBuffer(b);
+    if (e.tex) gl.deleteTexture(e.tex);
+    e.tex = e.mbuf = e.ibuf = null;
+  }
+
+  /* ---- Burn ---- */
+  function drawBurn(e, t) {
+    const pad = 120 * e.k, sy = e.y - sc.scrollTop;
+    use(P.glow, e, t); quad(-pad, -pad, e.w + pad, e.h + pad);
+    use(P.paper, e, t); gl.bindBuffer(gl.ARRAY_BUFFER, e.mbuf); attribs([[0, 2]]);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, e.ibuf); gl.drawElements(gl.TRIANGLES, e.icount, gl.UNSIGNED_SHORT, 0);
+    use(P.flame, e, t); quad(-12, -100 * e.k, e.w + 12, e.h);
+    const v = [];
+    for (const p of e.parts) {
+      const age = t - p.ts; if (age < 0 || age > p.life) continue;
+      const u = age / p.life, x = e.x + p.x + clamp(Math.sin(6 * age) * 12 * age, -20, 20) * p.dir, y = sy + p.y - p.rise * (1 - (1 - u) ** 2);
+      const a = (p.spark ? 1 : .6) * (1 - sstep(.45, 1, u)), r = p.size / 2;
+      if (p.spark) sprite(v, x, y, r * 1.7 * (1 - .3 * u), r * 1.7 * (1 - .3 * u), 0, [1, .62, .16, a], 1, 0);
+      else sprite(v, x, y, r, r, p.seed * 6 + age * 3, [.8, .78, .75, a], 2, p.seed);
+    }
+    drawSprites(v, e);
+  }
+
+  /* ---- Plume ---- */
+  function plumeAt(e, t) {
+    const k = e.k, gone = sstep(.72, 1.16, t), grow = 1 - (1 - clamp(t / .16)) ** 3;
+    return { gone, baseY: e.h - 150 * k * gone * gone, H: clamp(300 * k, 90, 300) * grow * (1 + .1 * Math.sin(t * 15)) * (1 + 1.3 * gone * gone),
+             hw: (36 + 26 * noise(t * 1.5, 3.7)) * k * (1 - .6 * gone) };
+  }
+  function drawPlume(e, t) {
+    const mid = e.w / 2, sy = e.y - sc.scrollTop, pl = plumeAt(e, t);
+    use(P.ppaper, e, t); quad(0, -24 * e.k, e.w, e.h);
+    if (pl.H > 1) {
+      const spread = .75 - .43 * pl.gone, hw = pl.hw + pl.H * 1.3 * spread + 60;
+      use(P.pflame, e, t, { u_pl: [pl.baseY, pl.H, pl.hw, pl.gone] }); quad(mid - hw, pl.baseY - pl.H * 1.3 - 40, mid + hw, e.h + 40);
+    }
+    const v = [];
+    for (const p of e.pieces) {
+      const age = t - p.ts; if (age < 0 || age > p.life) continue;
+      const u = age / p.life, q = plumeAt(e, p.ts), r = p.size * e.k / 2 * (1 - .35 * u);
+      sprite(v, e.x + mid + p.ox * q.hw * 1.6 + p.sway * Math.sin(u * 3), sy + q.baseY - q.H * p.oy - p.rise * e.k * (1 - (1 - u) ** 2), r * .8, r * 1.15, 0, [...p.col, .9 * (1 - sstep(.45, 1, u))], 3, 0);
+    }
+    for (const p of e.dots) {
+      const age = t - p.ts; if (age < 0 || age > p.life) continue;
+      const u = age / p.life, q = plumeAt(e, p.ts), r = p.size * e.k / 2;
+      sprite(v, e.x + mid + p.ox * q.hw + p.sway * u, sy + q.baseY - q.H * p.oy - p.rise * e.k * (1 - (1 - u) ** 2), r, r, 0, [1, .93, .74, .85 * sstep(0, .1, u) * (1 - sstep(.5, 1, u))], 3, 0);
+    }
+    drawSprites(v, e);
+  }
+
+  /* ---- Blocks ---- */
+  function stepBlocks(e, t) {
+    for (let tt = e.simT; tt < t;) {
+      const dt = Math.min(1 / 120, t - tt); tt += dt;
+      for (const c of e.chunks) {
+        if (c.rest || tt - .07 < c.delay) continue;
+        c.vy += 2300 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.rot += c.spin * dt;
+        const half = Math.max(c.w, c.h) / 2;
+        if (c.vy > 0 && c.y + half >= c.floor) {
+          c.y = c.floor - half;
+          if (!c.bounced) { c.bounced = true; c.vy *= -.42; c.vx *= .6; c.spin *= .4; } else c.rest = true;
+        }
+      }
+      e.simT = tt;
+    }
+  }
+  function drawBlocks(e, t) {
+    const v = [], sy = e.y - sc.scrollTop;
+    if (t < .07) {   // 70ms 撞击：放大 4%、闪白
+      const s = Math.sin(Math.PI * t / .07);
+      sprite(v, e.x + e.w / 2, sy + e.h / 2, e.w / 2 * (1 + .04 * s), e.h / 2 * (1 + .04 * s), 0, [.55 * s, 1, e.w, e.h], 0, -1);
+    } else {
+      stepBlocks(e, t);
+      for (const c of e.chunks) {
+        const f = sstep(c.fadeAt, c.fadeAt + .25, t), k = 1 - .8 * f; if (f >= 1) continue;
+        sprite(v, e.x + c.x, sy + c.y, c.w / 2 * k, c.h / 2 * k, c.rot, [0, 1 - f, c.w, c.h], 0, c.shade, c.uv);
+      }
+    }
+    drawSprites(v, e);
+  }
+
+  /* ---- Peel ---- */
+  function peelAt(e, t) {
+    const pp = clamp(t / .62), L = e.reach * pp * pp * (1.6 - .6 * pp), tb = 1.3 + .5 * pp, r = 20 * e.k, R = 420 * e.k;
+    const s0 = r * tb, a0 = L - r * Math.sin(tb), z0 = r * (1 - Math.cos(tb)), ca = a0 + R * Math.sin(tb), cz = z0 + R * Math.cos(tb);
+    const n = e.gx.length, X = new F32(n), Y = new F32(n), Z = new F32(n), TH = new F32(n), E = new F32(n);
+    for (let i = 0; i < n; i++) {
+      const dx = e.gx[i] - e.corner.x, dy = e.gy[i] - e.corner.y, s = dx * e.dir.x + dy * e.dir.y, ee = Math.max(L - s, 0);
+      let al = s, z = 0, th = 0;
+      if (ee > 0) {
+        if (ee <= s0) { th = ee / r; al = L - r * Math.sin(th); z = r * (1 - Math.cos(th)); }   // 贴着圆柱
+        else { th = tb + (ee - s0) / R; al = ca - R * Math.sin(th); z = cz - R * Math.cos(th); }  // 接一段切线连续的大弧
+      }
+      X[i] = e.corner.x + e.dir.x * al + (dx - e.dir.x * s); Y[i] = e.corner.y + e.dir.y * al + (dy - e.dir.y * s); Z[i] = z; TH[i] = th; E[i] = ee;
+    }
+    return { X, Y, Z, TH, E, L };
+  }
+  const avg = a => a.reduce((s, v) => s + v, 0) / a.length;
+  function drawPeel(e, t) {
+    let g, alpha = 1, dir = e.dir, glue = st.dark ? .12 : .34, L;
+    if (t < .62) { g = peelAt(e, t); L = g.L; }
+    else {
+      if (!e.rel) {   // 脱落：取最后 8ms 质心速度（平面内和高度）保持下去
+        const a = peelAt(e, .62), b = peelAt(e, .612), c1 = [avg(a.X), avg(a.Y), avg(a.Z)], c0 = [avg(b.X), avg(b.Y), avg(b.Z)];
+        e.rel = { g: a, com: c1, v: c1.map((v, i) => (v - c0[i]) / .008) };
+      }
+      const tau = t - .62, gg = (1 - Math.exp(-5 * tau)) / 5, { g: g0, com, v } = e.rel, n = g0.X.length;
+      const ang = 2.4 * gg * Math.sign(v[0] || 1), ca = Math.cos(ang), sa = Math.sin(ang), ox = v[0] * gg, oy = v[1] * gg + 300 * (tau - gg), oz = v[2] * gg;
+      g = { X: new F32(n), Y: new F32(n), Z: new F32(n), TH: g0.TH, E: g0.E };
+      for (let i = 0; i < n; i++) { const dx = g0.X[i] - com[0], dy = g0.Y[i] - com[1]; g.X[i] = com[0] + dx * ca - dy * sa + ox; g.Y[i] = com[1] + dx * sa + dy * ca + oy; g.Z[i] = g0.Z[i] + oz; }
+      dir = { x: e.dir.x * ca - e.dir.y * sa, y: e.dir.x * sa + e.dir.y * ca };
+      alpha = 1 - sstep(.3, .55, tau); glue *= 1 - sstep(0, .3, tau); L = e.reach + 1;
+    }
+    const ox0 = e.x, oy0 = e.y - sc.scrollTop, F = 1400, cx = W / 2, cy = H / 2, nx = e.nx;
+    if (glue > .001) { use(P.glue, e, t, { u_dir: [e.dir.x, e.dir.y], u_corner: [e.corner.x, e.corner.y], u_L: L, u_glue: glue }); quad(0, 0, e.w, e.h); }
+    const stuck = [], flap = [];
+    for (let j = 0; j < e.ny; j++) for (let i = 0; i < nx; i++) {
+      const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1, E = g.E;
+      (Math.max(E[a], E[b], E[c], E[d]) > 0 ? flap : stuck).push([a, b, c, d, E[a] + E[b] + E[c] + E[d]]);
+    }
+    flap.sort((p, q) => p[4] - q[4]);   // 从粘着端画到自由端：折叠的上层后画，盖在上面
+    const n = g.X.length, SX = new F32(n), SY = new F32(n);
+    for (let i = 0; i < n; i++) { const X = ox0 + g.X[i], Y = oy0 + g.Y[i], s = F / (F - g.Z[i]); SX[i] = cx + (X - cx) * s; SY[i] = cy + (Y - cy) * s; }   // 透视以屏幕中心为中心
+    const build = cells => { const out = new F32(cells.length * 30); let k = 0; for (const [a, b, c, d] of cells) for (const q of [a, b, d, a, d, c]) { out[k++] = SX[q]; out[k++] = SY[q]; out[k++] = e.gx[q]; out[k++] = e.gy[q]; out[k++] = g.TH[q]; } return out; };
+    const uni = stuckK => ({ u_dir: [dir.x, dir.y], u_corner: [e.corner.x, e.corner.y], u_L: L, u_alpha: alpha, u_stuck: stuckK, u_back: e.back });
+    const lay = [[0, 2], [1, 2], [2, 1]];
+    if (stuck.length) { use(P.peel, e, t, uni(sstep(0, 8, L))); stream(build(stuck), lay); gl.drawArrays(gl.TRIANGLES, 0, stuck.length * 6); }
+    if (flap.length) {
+      peelShadow(g, flap, alpha, ox0, oy0);
+      use(P.peel, e, t, uni(0)); stream(build(flap), lay); gl.drawArrays(gl.TRIANGLES, 0, flap.length * 6);
+    }
+  }
+  function ensureFbo() {
+    if (fbo) return;
+    const w = Math.max(1, cv.width >> 1), h = Math.max(1, cv.height >> 1), f = [], t = [];
+    for (let i = 0; i < 2; i++) {
+      const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null); texParams();
+      const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tx, 0);
+      f.push(fb); t.push(tx);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); fbo = { w, h, f, t };
+  }
+  // 阴影落在屏幕平面：偏移 (0.14, 0.22)·z，不加透视；先以 MAX 画进半分辨率缓冲，再按当前最大高度做一次可分离模糊
+  function peelShadow(g, cells, alpha, ox0, oy0) {
+    ensureFbo();
+    const out = new F32(cells.length * 18), base = st.dark ? .5 : .34; let k = 0, zmax = 0;
+    for (const [a, b, c, d] of cells) for (const q of [a, b, d, a, d, c]) {
+      const z = Math.max(g.Z[q], 0); zmax = Math.max(zmax, z);
+      out[k++] = ox0 + g.X[q] + .14 * z; out[k++] = oy0 + g.Y[q] + .22 * z; out[k++] = base / (1 + z / 170) * sstep(0, 14, z);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.f[0]); gl.viewport(0, 0, fbo.w, fbo.h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.blendEquation(gl.MAX); use(P.shadow); stream(out, [[0, 2], [1, 1]]); gl.drawArrays(gl.TRIANGLES, 0, cells.length * 6); gl.blendEquation(gl.FUNC_ADD);
+    gl.disable(gl.BLEND);
+    const sig = (8 + .24 * zmax) / 2 * (fbo.w / W) / 2.4;    // 13 个采样覆盖 ±2.5σ
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.f[1]); use(P.blur, null, 0, { u_step: [sig / fbo.w, 0] }, fbo.t[0]); full();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.f[0]); use(P.blur, null, 0, { u_step: [0, sig / fbo.h] }, fbo.t[1]); full();
+    gl.enable(gl.BLEND);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cv.width, cv.height);
+    use(P.comp, null, 0, { u_alpha: alpha }, fbo.t[0]); full();
+  }
+
+  /* ---- 淡出（减少动态效果、没有 WebGL2、超过 3 个）：快照 canvas 直接当 DOM 放回原位 ---- */
+  function startFade(e) {
+    const g = e.snap.c;
+    Object.assign(g.style, { left: px(e.x), top: px(e.y), width: px(e.w), height: px(e.h), opacity: '1', transform: '' });
+    ghosts.append(g); e.ghost = g;
+  }
+
+  /* ---- 邻居 ---- */
+  function react(e, get) {
+    const t = (vnow - e.start) / 1000, nbs = e.nbs.filter(n => n.el.isConnected);
+    if (e.kind === 'burn' || e.kind === 'plume') {
+      const burn = e.kind === 'burn', T = burn ? 1.4 : 1.25; if (t > T) return;
+      const env = sstep(0, .15, t) * (1 - sstep(T - .35, T, t)), flick = .8 + .2 * Math.sin(31 * t) * Math.sin(13 * t);
+      const gx = burn ? px(e.click.x + (e.far.x - e.click.x) * clamp(t / 1.15 * 1.4 - .1)) : '50%';   // Burn 的光跟着前沿走
+      for (const { el, d } of nbs) {
+        const s = get(el), f = 1 / Math.abs(d);
+        s.ty += Math.sign(d) * (burn ? 3 : 7) * f * env; s.sx *= 1 - .006 * f * env; s.sy *= 1 - .006 * f * env;
+        const a = (Math.abs(d) === 1 ? .42 : .1) * flick * env * (st.dark ? .5 : 1);
+        if (!s.glow || s.glow.a < a) s.glow = { x: gx, y: d < 0 ? '100%' : '0%', c: burn ? '255 176 96' : '255 178 150', a };
+        if (st.nb === 'heat') s.heat = Math.max(s.heat, (burn ? 4 : 5) * (d > 0 ? .6 : 1) * f * env);
+      }
+      if (st.nb === 'heat' && e.headD) { const s = get(head); s.heat = Math.max(s.heat, (burn ? 4 * .5 : 5 * .7) / e.headD * env); }
+    } else if (e.kind === 'blocks') {
+      const tau = t - .07; if (tau < 0 || tau > 1.3) return;
+      const ex = Math.exp(-6.5 * tau);
+      for (const { el, d } of nbs) {
+        const s = get(el), f = 1 / Math.abs(d), sg = Math.sign(d), q = .018 * Math.exp(-9 * tau) * f;
+        s.ty += sg * 18 * ex * Math.sin(24 * tau) * f; s.rot += sg * 1.1 * ex * Math.sin(20 * tau) * f; s.sy *= 1 - q; s.sx *= 1 + q * .5;
+      }
+    } else if (e.kind === 'peel') {
+      const v = t < .62 ? 6 * sstep(0, .62, t) : 6 * Math.exp(-7 * (t - .62)) * Math.cos(26 * (t - .62));
+      for (const { el, d } of nbs) get(el).ty -= Math.sign(d) * v / Math.abs(d);   // 向贴纸拉，脱落时回弹
+    }
+  }
+  let heatN = 0;
+  function heat(el, amt) {
+    let h = heatF.get(el);
+    if (amt < .05) { if (h) { el.style.filter = ''; h.f.remove(); heatF.delete(el); } return; }
+    if (!h) {
+      // 区域向下多留 440px，供 feOffset 把噪声往上推
+      const f = document.createElementNS(NS, 'filter'), w = el.offsetWidth, hh = el.offsetHeight;
+      f.id = `t014-heat-${++heatN}`;
+      for (const [k, v] of Object.entries({ filterUnits: 'userSpaceOnUse', primitiveUnits: 'userSpaceOnUse', x: -12, y: -12, width: w + 24, height: hh + 464, 'color-interpolation-filters': 'sRGB' })) f.setAttribute(k, v);
+      f.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.008 0.013" numOctaves="1" seed="${heatN}" result="n"/>
+<feComponentTransfer in="n" result="n2"><feFuncR type="linear" slope="2" intercept="-0.5"/><feFuncG type="linear" slope="0.667" intercept="0.1667"/></feComponentTransfer>
+<feOffset in="n2" dy="0" result="m"/>
+<feDisplacementMap in="SourceGraphic" in2="m" scale="0" xChannelSelector="R" yChannelSelector="G" result="d"/>
+<feMorphology in="d" operator="dilate" radius="1" result="dl"/>
+<feMerge result="mg"><feMergeNode in="dl"/><feMergeNode in="d"/></feMerge>
+<feGaussianBlur in="d" stdDeviation="0.8" result="b"/>
+<feComponentTransfer in="b" result="mask"><feFuncA type="linear" slope="2"/></feComponentTransfer>
+<feComposite in="mg" in2="mask" operator="in"/>`;
+      defs.append(f);
+      h = { f, off: f.querySelector('feOffset'), disp: f.querySelector('feDisplacementMap'), t0: vnow };
+      heatF.set(el, h); el.style.filter = `url(#${f.id})`;
+    }
+    h.off.setAttribute('dy', (-(vnow - h.t0) / 1000 * 170).toFixed(1));   // 170px/s 向上漂
+    h.disp.setAttribute('scale', (amt * 2.5).toFixed(2));
+  }
+
+  /* ---- 补位：FLIP 偏移 + 弹簧 ---- */
+  function offVal(o) {
+    const t = (vnow - o.at) / 1000;
+    if (t < 0) return o.dy;
+    if (t >= .52) return null;
+    // 1 − e^(−7t)cos 6t 在 520ms 时仍有约 2.6% 过冲，最后 120ms 把残差平滑收掉，避免收尾跳 3–4px
+    return o.dy * Math.exp(-7 * t) * Math.cos(6 * t) * (1 - sstep(.4, .52, t));
+  }
+  const offsetAt = el => (offsets.get(el) || []).reduce((s, o) => s + (offVal(o) ?? 0), 0);
+  function addOffset(el, dy, at, eid) { const a = offsets.get(el) || []; a.push({ dy, at, eid }); offsets.set(el, a); }
+
+  function applyDom() {
+    const S = new Map(), get = el => { let s = S.get(el); if (!s) S.set(el, s = { ty: 0, rot: 0, sx: 1, sy: 1, glow: null, heat: 0 }); return s; };
+    for (const [el, arr] of offsets) {
+      let y = 0; const keep = arr.filter(o => { const v = offVal(o); if (v === null) return false; y += v; return true; });
+      if (keep.length && el.isConnected) { offsets.set(el, keep); get(el).ty += y; } else offsets.delete(el);
+    }
+    if (st.nb !== 'off') for (const e of effects) react(e, get);
+    for (const [el, s] of S) {
+      const still = Math.abs(s.ty) < .01 && !s.rot && s.sx === 1 && s.sy === 1;
+      el.style.transform = still ? '' : `translateY(${px(s.ty)}) rotate(${s.rot.toFixed(3)}deg) scale(${s.sx.toFixed(4)}, ${s.sy.toFixed(4)})`;
+      // 火光画进卡片自己的填充：单独叠一层同圆角元素会在圆角处露出浅边
+      el.style.backgroundImage = s.glow ? `radial-gradient(115px circle at ${s.glow.x} ${s.glow.y}, rgb(${s.glow.c} / ${s.glow.a.toFixed(3)}), transparent 72%)` : '';
+      el.style.backgroundBlendMode = s.glow && !st.dark ? 'multiply' : '';
+      heat(el, s.heat); styled.add(el);
+    }
+    for (const el of styled) if (!S.has(el)) { el.style.transform = el.style.backgroundImage = el.style.backgroundBlendMode = ''; heat(el, 0); styled.delete(el); }
+  }
+
+  /* ---- 帧 ---- */
+  const DRAW = { burn: drawBurn, plume: drawPlume, blocks: drawBlocks, peel: drawPeel };
+  function finish(e) { e.done = true; freeGL(e); if (e.ghost) e.ghost.remove(); }
+  function frame(now) {
+    vnow += Math.min(now - last, 64) * st.speed; last = now;
+    for (const e of effects) if ((vnow - e.start) / 1000 > LIFE[e.kind]) finish(e);
+    effects = effects.filter(e => !e.done);
+    const glFx = effects.filter(e => e.kind !== 'fade' && (vnow - e.start) / 1000 <= DUR[e.kind]);
+    if (glFx.length && glState === 'ok') {
+      sizeCanvas(); cv.style.display = 'block';
+      gl.viewport(0, 0, cv.width, cv.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+      for (const e of glFx) DRAW[e.kind](e, (vnow - e.start) / 1000);
+    } else if (cv.style.display === 'block') {
+      if (glState === 'ok') { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); }
+      cv.style.display = 'none';
+    }
+    for (const e of effects) if (e.kind === 'fade') {
+      const u = clamp((vnow - e.start) / 220);
+      e.ghost.style.opacity = String(1 - u); e.ghost.style.transform = `scale(${1 - .04 * (1 - (1 - u) ** 2)})`;
+    }
+    applyDom();
+    return effects.length || offsets.size || styled.size;
+  }
+  function tick(now) { raf = frame(now) ? requestAnimationFrame(tick) : 0; }
+  function kick() { if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); } }
+
+  /* ---- 删除、撤销、重置 ---- */
+  function del(card) {
+    kick();
+    const cards = [...list.children], idx = cards.indexOf(card), it = card._it, btn = $('.t014-del', card);
+    const vr = sc.getBoundingClientRect(), r = card.getBoundingClientRect(), br = btn.getBoundingClientRect();
+    // 改状态之前：读矩形、拍快照
+    const snap = snapshot(card);
+    const e = { id: ++uid, start: vnow, x: r.left - vr.left, y: r.top - vr.top + sc.scrollTop, w: r.width, h: r.height, rad: snap.rad, snap, item: it, idx, color: it.c,
+                click: { x: br.left + br.width / 2 - r.left, y: br.top + br.height / 2 - r.top } };
+    e.k = clamp(Math.sqrt(e.w * e.h / (432 * 130)), .6, 1.4);
+    e.far = [[0, 0], [e.w, 0], [0, e.h], [e.w, e.h]].map(([x, y]) => ({ x, y, d: Math.hypot(x - e.click.x, y - e.click.y) })).reduce((a, b) => b.d > a.d ? b : a);
+    e.maxD = e.far.d;
+    e.nbs = [-2, -1, 1, 2].map(d => ({ el: cards[idx + d], d })).filter(n => n.el);
+    e.headD = idx < 2 ? idx + 1 : 0;
+    const busy = effects.filter(x => x.kind !== 'fade').length;
+    e.kind = reduceMotion.matches || busy >= 3 || !glOK() ? 'fade' : st.fx;
+    // 数据立即删除；其余卡片记一条等待中的偏移（FLIP），到补位时间再弹回
+    const before = new Map(cards.map(el => [el, el.offsetTop]));
+    items.splice(items.indexOf(it), 1); card.remove();
+    for (const el of list.children) { const dy = before.get(el) - el.offsetTop; if (dy) addOffset(el, dy, vnow + GAP[e.kind] * 1000, e.id); }
+    if (e.kind === 'fade') startFade(e); else setupGL(e);
+    effects.push(e); undoStack.push(e); sync();
+    live.textContent = `已删除「${it.t}」`;
+    const next = list.children[idx] || list.children[idx - 1];
+    (next ? $('.t014-del', next) : resetBtn).focus({ preventScroll: true });
+    frame(performance.now());
+  }
+  function undo() {
+    const e = undoStack.pop(); if (!e) return;
+    kick();
+    // 撤销：立即停掉那次特效、去掉它的补位偏移；其余卡片从当前画面位置弹到新位置
+    const els = [...list.children], vis = new Map(els.map(el => [el, el.offsetTop + offsetAt(el)]));
+    if (!e.done) finish(e);
+    effects = effects.filter(x => x !== e);
+    for (const [el, arr] of offsets) offsets.set(el, arr.filter(o => o.eid !== e.id));
+    const i = Math.min(e.idx, items.length); items.splice(i, 0, e.item);
+    const card = cardEl(e.item); list.insertBefore(card, list.children[i] || null);
+    for (const el of els) { const dy = vis.get(el) - el.offsetTop - offsetAt(el); if (Math.abs(dy) > .5) addOffset(el, dy, vnow, 0); }
+    card.animate([{ opacity: 0, transform: 'scale(.96)' }, { opacity: 1, transform: 'none' }], { duration: 260 / st.speed, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    sync(); live.textContent = `已恢复「${e.item.t}」`;
+    $('.t014-del', card).focus({ preventScroll: true });
+    frame(performance.now());
+  }
+  function reset() {
+    effects.forEach(finish); effects = []; undoStack = []; offsets.clear();
+    items = DATA.slice(); list.replaceChildren(...items.map(cardEl));
+    applyDom(); sync(); sc.scrollTop = 0;
+  }
+
+  list.addEventListener('click', ev => { const b = ev.target.closest('.t014-del'); if (b) del(b.closest('.t014-card')); });
+  undoBtn.addEventListener('click', undo);
+  resetBtn.addEventListener('click', reset);
+  seg($('#t014-fx'), v => { st.fx = v; });
+  seg($('#t014-nb'), v => { st.nb = v; });
+  seg($('#t014-speed'), v => { st.speed = +v; });
+  const setMode = dark => { st.dark = dark; app.dataset.mode = dark ? 'dark' : 'light'; $$('#t014-mode button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.v === 'dark') === dark))); };
+  seg($('#t014-mode'), v => setMode(v === 'dark'));
+  setMode(isDarkTheme()); onThemeChange(() => setMode(isDarkTheme()));
+  reset();
+  // 调试与验收用：读当前状态
+  window.t014 = { get effects() { return effects.map(e => ({ kind: e.kind, t: (vnow - e.start) / 1000 })); }, get glState() { return glState; } };
+})();
+</script>
+</body>
+</html>

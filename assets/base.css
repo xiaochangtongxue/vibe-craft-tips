@@ -1,0 +1,89 @@
+/* 命名：012 起每期的 class、id、@keyframes、自定义属性都用 tNNN- 前缀（如 .t012-msg、#t012-app、--t012-top），
+   不会和其他期或 @property 撞名；001–011 沿用历史短前缀，不再新增短前缀。详见 ../MAINTAINING.md */
+/* 每期一个 HTML：本文件是各页共用的 token、标题、舞台、分段控件和按钮；各期自己的样式写在各自页面里 */
+@property --top { syntax: '<color>'; inherits: false; initial-value: #fff; }
+@property --bot { syntax: '<color>'; inherits: false; initial-value: #fff; }
+:root {
+  --bg: #f2f3f5; --surface: #ffffff; --stage: #e8eaee; --fg: #161b24; --muted: #646d7b; --faint: #9aa1ac;
+  --line: rgba(15,23,42,.09); --line-strong: rgba(15,23,42,.16);
+  --accent: #2f62e9; --accent-soft: rgba(47,98,233,.10); --on-accent: #ffffff;
+  --is-dark: 0;
+  --paper: #f7f8fa; --paper-ink: #1f2937;
+  --m-surface: rgba(255,255,255,.96); --m-border: rgba(0,0,0,.14); --m-ink: #263140; --m-hover: rgba(15,23,42,.07);
+  --m-quiet: #7A8491; --m-chev: #94A3B8;
+  --m-shadow: 0 18px 34px rgba(15,23,42,.12), 0 2px 4px rgba(15,23,42,.05), inset 0 1px 0 rgba(255,255,255,.74);
+  --pop-shadow: 0 16px 36px -8px rgba(15,23,42,.22), 0 0 0 1px rgba(15,23,42,.08);
+  --font: "Geist", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --serif: "Instrument Serif", "Songti SC", "Noto Serif SC", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111215; --surface: #18191d; --stage: #1e2025; --fg: #e8e9ec; --muted: #9a9ea8; --faint: #6c707a;
+    --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.15);
+    --accent: #7d9bff; --accent-soft: rgba(125,155,255,.14); --on-accent: #0c1430; --is-dark: 1;
+    --m-surface: rgba(34,34,34,.96); --m-border: rgba(255,255,255,.12); --m-ink: #E4E4E4; --m-hover: rgba(255,255,255,.08);
+    --m-quiet: #9A9A9A; --m-chev: #8A8A8A;
+    --m-shadow: 0 18px 34px rgba(0,0,0,.42), 0 2px 4px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.06);
+    --pop-shadow: 0 16px 36px -8px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.1);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111215; --surface: #18191d; --stage: #1e2025; --fg: #e8e9ec; --muted: #9a9ea8; --faint: #6c707a;
+  --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.15);
+  --accent: #7d9bff; --accent-soft: rgba(125,155,255,.14); --on-accent: #0c1430; --is-dark: 1;
+  --m-surface: rgba(34,34,34,.96); --m-border: rgba(255,255,255,.12); --m-ink: #E4E4E4; --m-hover: rgba(255,255,255,.08);
+  --m-quiet: #9A9A9A; --m-chev: #8A8A8A;
+  --m-shadow: 0 18px 34px rgba(0,0,0,.42), 0 2px 4px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.06);
+  --pop-shadow: 0 16px 36px -8px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.1);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.65 var(--font); -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+a { color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; transition-delay: 0ms !important; }
+}
+
+.tip { display: flex; flex-direction: column; gap: 16px; padding-top: 72px; scroll-margin-top: 24px; }
+.tip-h { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.tip-h .no { font: 500 13px var(--mono); color: var(--accent); }
+.tip-h h2 { font: 620 25px/1.3 var(--font); margin: 0; letter-spacing: -.012em; text-wrap: balance; }
+.tip-h .src { margin-left: auto; font-size: 13px; color: var(--muted); text-decoration: none; }
+.tip-h .src:hover { color: var(--fg); }
+.lede { margin: 0; color: var(--muted); max-width: 64ch; text-wrap: pretty; }
+.stage { position: relative; background: var(--stage); border-radius: 20px; padding: 28px; box-shadow: inset 0 0 0 1px var(--line); min-width: 0; }
+@media (max-width: 600px) { .stage { padding: 18px; border-radius: 16px; } }
+.specs { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.specs li { font: 12.5px/1.5 var(--mono); color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; }
+.credit { margin-top: 88px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+
+.ctrls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.seg button { border: 0; background: transparent; font-size: 13px; font-weight: 500; color: var(--muted); padding: 5px 12px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+.seg button:hover { color: var(--fg); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.seg button:disabled { opacity: .45; cursor: not-allowed; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+
+/* 多期共用的按钮 */
+.o-btn { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; font-size: 13px; font-weight: 500; }
+.o-btn.pri { background: var(--fg); color: var(--bg); border-color: transparent; }
+.o-btn.red { background: #d23c3c; color: #fff; border-color: transparent; }
+
+/* 单页：每期一个 HTML */
+.page { max-width: 1000px; margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 80px max(16px, env(safe-area-inset-left, 0px)); }
+.crumbs { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--fg); }
+.page > .tip { padding-top: 28px; }
+.page > .credit { margin-top: 64px; }

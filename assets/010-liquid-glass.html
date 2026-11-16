@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>010 · 液态玻璃材质</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 010 液态玻璃 ---------- */
+.g-scene { position: relative; height: 470px; border-radius: 18px; overflow: hidden; margin-top: 18px; background: #0c0f24; touch-action: none; }
+.g-scene > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.glass { position: absolute; left: 0; top: 0; border-radius: var(--gr, 24px); color: var(--g-ink); cursor: grab; user-select: none; touch-action: none; --tint: rgba(255,255,255,.12);
+  box-shadow: 0 16px 36px -12px rgba(0,0,0,.42), 0 2px 6px rgba(0,0,0,.14); }
+.glass.grabbing { cursor: grabbing; }
+.glass::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--tint); transition: background-color 300ms; }
+.glass::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: var(--rim); transition: box-shadow 300ms; }
+.glass > * { position: relative; }
+.glass.light { --g-ink: #10131a;
+  --rim: inset 1.5px 1.5px 0 -.5px rgba(255,255,255,.8), inset -1.5px -1.5px 0 -.5px rgba(255,255,255,.45), inset 5px 5px 8px -6px rgba(255,255,255,.75), inset -5px -5px 8px -6px rgba(255,255,255,.4); }
+.glass.dark { --g-ink: #ffffff;
+  --rim: inset 1.5px 1.5px 0 -.5px rgba(255,255,255,.42), inset -1.5px -1.5px 0 -.5px rgba(255,255,255,.2), inset 5px 5px 8px -6px rgba(255,255,255,.3), inset -5px -5px 8px -6px rgba(255,255,255,.14); }
+/* 文字着色：浅色玻璃正片叠底，深色玻璃叠加提亮，让字带一点背景色 */
+.glass.light .g-txt { color: rgba(0,0,0,.84); mix-blend-mode: multiply; }
+.glass.dark .g-txt { color: rgba(255,255,255,.9); mix-blend-mode: plus-lighter; }
+.glass .sub { opacity: .62; }
+.g-player { --gr: 28px; width: 296px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.gp { display: flex; gap: 12px; align-items: center; }
+.gp-art { width: 56px; height: 56px; border-radius: 12px; flex: none; background: conic-gradient(from 210deg, #ff8a5c, #ffd36e, #7be0c3, #6b8cff, #c07bff, #ff8a5c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
+.gp b { display: block; font-size: 15px; font-weight: 600; line-height: 1.3; }
+.gp span { display: block; font-size: 12.5px; }
+.gp-bar { height: 4px; border-radius: 2px; background: currentColor; opacity: .22; position: relative; }
+.gp-bar::after { content: ""; position: absolute; inset: 0 64% 0 0; border-radius: inherit; background: currentColor; opacity: 1; }
+.gp-time { display: flex; justify-content: space-between; font: 500 11px var(--mono); margin-top: -6px; }
+.gp-ctl { display: flex; justify-content: center; gap: 30px; align-items: center; }
+.gp-ctl svg { width: 22px; height: 22px; }
+.gp-ctl .play { width: 30px; height: 30px; }
+.g-search { --gr: 26px; width: min(340px, calc(100% - 32px)); height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 10px 0 18px; }
+.g-search svg { width: 18px; height: 18px; flex: none; }
+.g-search span { flex: 1; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-search kbd { background: rgba(127,127,127,.18); border: 0; box-shadow: none; color: inherit; font-size: 11.5px; padding: 3px 7px; }
+.g-card { --gr: 30px; width: 168px; height: 168px; padding: 18px; display: flex; flex-direction: column; }
+.g-card small { font: 500 12px var(--mono); }
+.g-card b { font: 600 44px/1 var(--font); letter-spacing: -.03em; margin-top: 6px; }
+.g-card span { margin-top: auto; font-size: 13px; line-height: 1.35; }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="009-overlay-choice.html">← 009</a><a href="011-motion-easing.html">011 →</a></span></nav>
+<section class="tip" id="t010">
+  <div class="tip-h"><span class="no">010</span><h2>液态玻璃材质</h2><a class="src" href="https://x.com/Kubai087/status/2117782193108082923" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">投影、模糊提亮、边缘折射、着色、边缘光、文字着色六层叠成；按背景平均亮度自动切换深浅。把玻璃拖到明暗交界处看看。</p>
+  <div class="stage">
+    <div class="ctrls">
+      <div class="seg" id="gMode" role="group" aria-label="玻璃深浅"><button type="button" data-v="auto" aria-pressed="true">自动</button><button type="button" data-v="light" aria-pressed="false">浅色</button><button type="button" data-v="dark" aria-pressed="false">深色</button></div>
+      <div class="seg" id="gRefr" role="group" aria-label="边缘折射"><button type="button" data-v="on" aria-pressed="true">折射开</button><button type="button" data-v="off" aria-pressed="false">折射关</button></div>
+    </div>
+    <div class="g-scene" id="gScene">
+      <canvas id="gBg"></canvas>
+      <div class="glass g-player" data-x=".06" data-y=".1">
+        <div class="gp"><div class="gp-art"></div><div><b class="g-txt">Threads of Light</b><span class="g-txt sub">pro-threads · Kubai</span></div></div>
+        <div class="gp-bar g-txt"></div>
+        <div class="gp-time g-txt"><span>1:24</span><span>-2:31</span></div>
+        <div class="gp-ctl g-txt">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 6v12L9.5 12z"/></svg>
+          <svg class="play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 6v12l10.5-6z"/></svg>
+        </div>
+      </div>
+      <div class="glass g-search" data-x=".44" data-y=".72">
+        <svg class="g-txt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+        <span class="g-txt sub">搜索标签页、书签和历史</span><kbd class="g-txt">⌘K</kbd>
+      </div>
+      <div class="glass g-card" data-x=".66" data-y=".12">
+        <small class="g-txt sub">周三 · 11 月</small><b class="g-txt">04</b><span class="g-txt">3 个待办<br><span class="sub">下一项 14:00</span></span>
+      </div>
+    </div>
+  </div>
+  <ul class="specs"><li>浅色：白 6–22% · blur 2px · 饱和 180% · 亮度 1.06</li><li>深色：rgb(20 20 24) 16–38% · 饱和 160% · 亮度 0.8</li><li>折射边宽 44px · 偏移 1.1× · 色散 ±15%</li><li>折射依赖 Chromium 的 backdrop-filter: url()</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="gDefs"></defs></svg>
+<script src="base.js"></script>
+<script>
+/* ---------- 010 液态玻璃 ---------- */
+(() => {
+  const scene = $('#gScene'), bg = $('#gBg'), defs = $('#gDefs');
+  const glasses = $$('.glass', scene);
+  let mode = 'auto', refr = true, bgData = null, bgW = 0, bgDpr = 1;
+
+  function paintBg() {
+    const W = scene.clientWidth, H = scene.clientHeight, dpr = Math.min(2, devicePixelRatio || 1);
+    bg.width = Math.round(W * dpr); bg.height = Math.round(H * dpr);
+    const c = bg.getContext('2d', { willReadFrequently: true });
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const g = c.createLinearGradient(0, 0, W, H * .4);
+    g.addColorStop(0, '#fbf3e8'); g.addColorStop(.38, '#bcd7ff'); g.addColorStop(.6, '#2c2f74'); g.addColorStop(1, '#0b0e22');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const blob = (x, y, r, col) => { const rg = c.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, col); rg.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = rg; c.fillRect(0, 0, W, H); };
+    blob(W * .16, H * .78, W * .26, 'rgba(255,140,90,.85)');
+    blob(W * .36, H * .2, W * .18, 'rgba(255,210,120,.7)');
+    blob(W * .72, H * .3, W * .22, 'rgba(140,90,255,.75)');
+    blob(W * .9, H * .86, W * .2, 'rgba(255,70,150,.6)');
+    blob(W * .52, H * .62, W * .16, 'rgba(70,220,190,.55)');
+    c.strokeStyle = 'rgba(128,128,150,.28)'; c.lineWidth = 1;
+    for (let x = 0; x < W; x += 28) { c.beginPath(); c.moveTo(x + .5, 0); c.lineTo(x + .5, H); c.stroke(); }
+    for (let y = 0; y < H; y += 28) { c.beginPath(); c.moveTo(0, y + .5); c.lineTo(W, y + .5); c.stroke(); }
+    c.font = `700 ${Math.round(Math.min(W * .17, 150))}px Geist, system-ui, sans-serif`;
+    c.textBaseline = 'alphabetic';
+    c.fillStyle = 'rgba(20,24,40,.88)'; c.fillText('Liquid', W * .04, H * .64);
+    c.fillStyle = 'rgba(255,255,255,.92)'; c.textAlign = 'right'; c.fillText('Glass', W * .97, H * .93); c.textAlign = 'left';
+    bgData = c.getImageData(0, 0, bg.width, bg.height).data; bgW = bg.width; bgDpr = dpr;
+  }
+
+  // 位移贴图：边缘一圈把背景往里压，越靠边越狠，中间保持平整
+  function makeFilter(el, i) {
+    const w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight);
+    const r = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0, w / 2, h / 2);
+    const edge = Math.min(44, Math.min(w, h) * .42), maxD = edge * 1.1;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d'), im = cx.createImageData(w, h), d = im.data;
+    const sd = (px, py) => {
+      const qx = Math.abs(px) - (w / 2 - r), qy = Math.abs(py) - (h / 2 - r);
+      return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+    };
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const px = x + .5 - w / 2, py = y + .5 - h / 2, dist = -sd(px, py);
+      let m = clamp(1 - dist / edge);
+      m = m * m;
+      let nx = sd(px + 1, py) - sd(px - 1, py), ny = sd(px, py + 1) - sd(px, py - 1);
+      const len = Math.hypot(nx, ny) || 1;
+      nx /= len; ny /= len;
+      const k = (y * w + x) * 4;
+      d[k] = 128 + 127 * nx * m; d[k + 1] = 128 + 127 * ny * m; d[k + 2] = 128; d[k + 3] = 255;
+    }
+    cx.putImageData(im, 0, 0);
+    const url = cv.toDataURL();
+    const id = 'lg' + i, S = 2 * maxD;
+    const old = document.getElementById(id);
+    if (old) old.remove();
+    const ns = 'http://www.w3.org/2000/svg';
+    const f = document.createElementNS(ns, 'filter');
+    f.setAttribute('id', id);
+    ['x', 'y'].forEach(a => f.setAttribute(a, '0'));
+    f.setAttribute('width', w); f.setAttribute('height', h);
+    f.setAttribute('filterUnits', 'userSpaceOnUse');
+    f.setAttribute('color-interpolation-filters', 'sRGB');
+    // 色散：红光比蓝光多弯一点（±15%）
+    f.innerHTML = `<feImage href="${url}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="map"/>
+      <feDisplacementMap in="SourceGraphic" in2="map" scale="${S * 1.15}" xChannelSelector="R" yChannelSelector="G" result="dr"/>
+      <feColorMatrix in="dr" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>
+      <feDisplacementMap in="SourceGraphic" in2="map" scale="${S}" xChannelSelector="R" yChannelSelector="G" result="dg"/>
+      <feColorMatrix in="dg" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>
+      <feDisplacementMap in="SourceGraphic" in2="map" scale="${S * .85}" xChannelSelector="R" yChannelSelector="G" result="db"/>
+      <feColorMatrix in="db" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>
+      <feBlend in="r" in2="g" mode="screen" result="rg"/><feBlend in="rg" in2="b" mode="screen"/>`;
+    defs.appendChild(f);
+    el.dataset.f = id;
+  }
+
+  // 多个采样点求平均亮度：低于 0.5 用深色玻璃；亮度起伏越大，着色越浓
+  function update(el) {
+    const W = scene.clientWidth, H = scene.clientHeight;
+    const x0 = el.offsetLeft, y0 = el.offsetTop, w = el.offsetWidth, h = el.offsetHeight;
+    const Ls = [];
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 6; i++) {
+      const px = clamp(Math.round((x0 + w * (i + .5) / 6) * bgDpr), 0, bgW - 1), py = clamp(Math.round((y0 + h * (j + .5) / 4) * bgDpr), 0, bg.height - 1);
+      const k = (py * bgW + px) * 4;
+      Ls.push((.299 * bgData[k] + .587 * bgData[k + 1] + .114 * bgData[k + 2]) / 255);
+    }
+    const avg = Ls.reduce((a, b) => a + b, 0) / Ls.length;
+    const std = Math.sqrt(Ls.reduce((a, b) => a + (b - avg) ** 2, 0) / Ls.length);
+    const c = clamp(std / .22);
+    const dark = mode === 'auto' ? avg < .5 : mode === 'dark';
+    el.classList.toggle('dark', dark); el.classList.toggle('light', !dark);
+    el.style.setProperty('--tint', dark ? `rgba(20,20,24,${(.16 + .22 * c).toFixed(3)})` : `rgba(255,255,255,${(.06 + .16 * c).toFixed(3)})`);
+    const tail = dark ? 'blur(2px) saturate(160%) brightness(.8)' : 'blur(2px) saturate(180%) brightness(1.06)';
+    el.style.backdropFilter = (refr ? `url(#${el.dataset.f}) ` : '') + tail;
+    el.style.webkitBackdropFilter = tail;
+  }
+
+  function layoutAll(first) {
+    paintBg();
+    const W = scene.clientWidth, H = scene.clientHeight;
+    glasses.forEach((el, i) => {
+      makeFilter(el, i);
+      let x = first ? W * +el.dataset.x : el.offsetLeft, y = first ? H * +el.dataset.y : el.offsetTop;
+      x = clamp(x, 8, W - el.offsetWidth - 8); y = clamp(y, 8, H - el.offsetHeight - 8);
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      update(el);
+    });
+  }
+
+  glasses.forEach(el => {
+    let drag = null;
+    el.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      scene.appendChild(el);
+      el.setPointerCapture(e.pointerId);
+      drag = { id: e.pointerId, dx: e.clientX - el.offsetLeft, dy: e.clientY - el.offsetTop };
+      el.classList.add('grabbing');
+    });
+    el.addEventListener('pointermove', e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const W = scene.clientWidth, H = scene.clientHeight;
+      el.style.left = clamp(e.clientX - drag.dx, 0, W - el.offsetWidth) + 'px';
+      el.style.top = clamp(e.clientY - drag.dy, 0, H - el.offsetHeight) + 'px';
+      update(el);
+    });
+    const stop = () => { drag = null; el.classList.remove('grabbing'); };
+    el.addEventListener('pointerup', stop);
+    el.addEventListener('pointercancel', stop);
+  });
+  seg($('#gMode'), v => { mode = v; glasses.forEach(update); });
+  seg($('#gRefr'), v => { refr = v === 'on'; glasses.forEach(update); });
+  let first = true, rt = 0;
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { layoutAll(first); first = false; }, first ? 0 : 120); }).observe(scene);
+  document.fonts && document.fonts.ready.then(() => { paintBg(); glasses.forEach(update); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>002 · 级联菜单的安全三角区与延时</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 002 级联菜单 ---------- */
+.m-stage { min-height: 400px; display: flex; flex-direction: column; gap: 20px; }
+.m-anchor { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px 0 10px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface); font-size: 14px; font-weight: 500; cursor: pointer; align-self: flex-start; }
+.m-anchor svg { width: 18px; height: 18px; color: var(--muted); }
+.m-anchor[aria-expanded="true"] { background: var(--m-hover); }
+.mpanel { position: fixed; z-index: 50; min-width: 210px; max-width: 260px; max-height: min(420px, calc(100vh - 24px)); overflow: auto;
+  padding: 6px; border-radius: 12px; border: 1px solid var(--m-border); background: var(--m-surface); box-shadow: var(--m-shadow);
+  -webkit-backdrop-filter: blur(18px) saturate(135%); backdrop-filter: blur(18px) saturate(135%); color: var(--m-ink);
+  display: flex; flex-direction: column; gap: 4px; overscroll-behavior: contain;
+  opacity: 0; transform: translateX(-8px) scale(.88, .98);
+  transition: opacity 170ms ease, transform 360ms cubic-bezier(.2, 1.45, .35, 1), background-color 500ms, border-color 500ms, box-shadow 500ms, color 500ms; }
+.mpanel.flip { transform: translateX(8px) scale(.88, .98); }
+.mpanel.root { transform: translateY(-6px) scale(.96, .86); }
+.mpanel.in { opacity: 1; transform: none; }
+.m-title { font: 600 11px/1.4 var(--font); color: var(--m-quiet); padding: 4px 8px 2px; }
+.mrow { display: flex; align-items: center; gap: 8px; height: 32px; flex: none; padding: 0 8px; border-radius: 8px; font-size: 14px; font-weight: 500; line-height: 1; cursor: default; outline: none; white-space: nowrap; }
+.mrow .m-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.mrow.hover, .mrow.active { background: var(--m-hover); }
+.mrow:focus-visible { background: var(--m-hover); box-shadow: inset 0 0 0 2px var(--accent); }
+.m-ico { width: 18px; height: 18px; flex: none; color: var(--m-quiet); display: grid; }
+.m-ico svg { width: 18px; height: 18px; overflow: visible; }
+.m-chev { width: 16px; height: 16px; color: var(--m-chev); flex: none; }
+.m-ico .front { transform-box: fill-box; transform-origin: 50% 100%; transition: transform 460ms cubic-bezier(.22, 1, .36, 1); }
+.mrow.open .m-ico .front { transform: skewX(-16deg) scaleY(.8) translateX(1.5px); }
+.m-debug { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
+.m-debug polygon { fill: rgba(47,98,233,.16); stroke: #2f62e9; stroke-width: 1; stroke-dasharray: 4 3; }
+.m-readout { margin-top: auto; align-self: flex-end; display: grid; gap: 7px; font: 12px/1.4 var(--mono); color: var(--muted); width: min(280px, 100%); }
+.m-readout .r { display: grid; grid-template-columns: 64px 1fr 84px; gap: 10px; align-items: center; }
+.m-readout .r b { font-weight: 500; text-align: right; color: var(--fg); font-variant-numeric: tabular-nums; }
+.m-readout .bar { height: 4px; border-radius: 2px; background: var(--line-strong); overflow: hidden; }
+.m-readout .bar i { display: block; height: 100%; background: var(--accent); width: 0; }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="001-tactile-button.html">← 001</a><a href="003-dither-ascii.html">003 →</a></span></nav>
+<section class="tip" id="t002">
+  <div class="tip-h"><span class="no">002</span><h2>级联菜单的安全三角区与延时</h2><a class="src" href="https://x.com/Kubai087/status/2114729985143677258" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">打开「设计资源」，再斜着划向子菜单底部的条目。三角区内路过的行不会抢走子菜单；切到「普通菜单」对比一下。</p>
+  <div class="stage m-stage">
+    <div class="ctrls">
+      <div class="seg" id="mMode" role="group" aria-label="菜单模式"><button type="button" data-v="safe" aria-pressed="true">安全区 + 延时</button><button type="button" data-v="plain" aria-pressed="false">普通菜单</button></div>
+      <div class="seg" id="mDbg" role="group" aria-label="调试叠层"><button type="button" data-v="on" aria-pressed="true">显示安全区</button><button type="button" data-v="off" aria-pressed="false">隐藏</button></div>
+    </div>
+    <button class="m-anchor" id="mAnchor" type="button" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"/></svg>书签</button>
+    <div class="m-readout" id="mReadout" aria-hidden="true">
+      <div class="r"><span>打开</span><div class="bar"><i></i></div><b>—</b></div>
+      <div class="r"><span>安全窗口</span><div class="bar"><i></i></div><b>—</b></div>
+      <div class="r"><span>关闭</span><div class="bar"><i></i></div><b>—</b></div>
+    </div>
+  </div>
+  <ul class="specs"><li>打开延时 220ms</li><li>三角顶点 = 倒数第二次 pointermove</li><li>每 80ms 复查，最长 1200ms</li><li>关闭延时 360ms</li><li>入场 cubic-bezier(.2, 1.45, .35, 1)</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 002 级联菜单 ---------- */
+(() => {
+  const anchor = $('#mAnchor'), poly = $('#mDebug polygon'), readout = $('#mReadout');
+  const bars = $$('.r', readout).map(r => ({ i: $('i', r), b: $('b', r) }));
+  const SAFE = { open: 220, tick: 80, max: 1200, close: 360 };
+  const PLAIN = { open: 0, tick: 80, max: 0, close: 0 };
+  let T = SAFE, safeOn = true, debugOn = true;
+  const ICON = {
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path class="front" d="M3 10.5h18V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".18"/></svg>',
+    link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.4 2.6 2.4 13.4 0 16M12 4c-2.4 2.6-2.4 13.4 0 16"/></svg>',
+    chev: '<svg class="m-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>'
+  };
+  const TREE = { label: '书签', children: [
+    { label: '设计资源', children: [
+      { label: '图标库', children: [{ label: 'Lucide' }, { label: 'Huge Icons' }, { label: 'Remix Icon' }] },
+      { label: '灵感', children: [{ label: 'Mobbin' }, { label: 'Dribbble' }, { label: 'Godly' }] },
+      { label: '字体', children: [{ label: 'Google Fonts' }, { label: 'Fontshare' }] },
+      { label: 'Figma 社区' }, { label: 'Kubai Icons 图库' }, { label: 'Refactoring UI' }] },
+    { label: '开发', children: [{ label: 'GitHub' }, { label: 'MDN Web Docs' }, { label: 'Can I use' }, { label: 'Tailwind CSS' }] },
+    { label: '阅读清单', children: [{ label: 'Laws of UX' }, { label: 'Apple HIG' }, { label: 'Material Design' }] },
+    { label: 'Lumno' }, { label: 'kubai.design' }, { label: 'X · @Kubai087' }] };
+
+  let panels = [], pts = [], curLevel = -1;
+  let openTimer = null, openT0 = 0, closeTimer = null, closeT0 = 0, pend = null;
+
+  const cross = (p, a, b) => (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
+  // 点在三角形内：三条边的叉积同号（含边上）
+  function inTri(p, a, b, c) {
+    const d1 = cross(p, a, b), d2 = cross(p, b, c), d3 = cross(p, c, a);
+    return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+  }
+  function geom(L) {
+    const child = panels[L + 1];
+    if (!child || pts.length === 0) return null;
+    const pr = panels[L].el.getBoundingClientRect(), cr = child.el.getBoundingClientRect();
+    const right = !child.el.classList.contains('flip');
+    const ex = right ? cr.left : cr.right;
+    // 用较旧的一次位置做顶点，避免三角形退化成一个点
+    const apex = pts.length >= 2 ? pts[pts.length - 2] : pts[0];
+    const band = Math.min(90, Math.max(56, pr.width * 0.43));
+    return { apex, b: { x: ex, y: cr.top }, c: { x: ex, y: cr.bottom }, right, pr, band };
+  }
+  function inSafe(L, p) {
+    if (!safeOn) return false;
+    const g = geom(L);
+    if (!g) return false;
+    const inBand = g.right ? p.x >= g.pr.right - g.band : p.x <= g.pr.left + g.band;
+    return inBand && inTri(p, g.apex, g.b, g.c);
+  }
+
+  function build(node, L) {
+    const el = document.createElement('div');
+    el.className = 'mpanel' + (L === 0 ? ' root' : '');
+    el.setAttribute('role', 'menu');
+    el.dataset.level = L;
+    el.innerHTML = `<div class="m-title">${node.label}</div>`;
+    const rows = node.children.map(ch => {
+      const r = document.createElement('div');
+      r.className = 'mrow';
+      r.setAttribute('role', 'menuitem');
+      r.tabIndex = -1;
+      r.node = ch;
+      if (ch.children) { r.setAttribute('aria-haspopup', 'menu'); r.setAttribute('aria-expanded', 'false'); }
+      r.innerHTML = `<span class="m-ico">${ch.children ? ICON.folder : ICON.link}</span><span class="m-label">${ch.label}</span>${ch.children ? ICON.chev : ''}`;
+      el.appendChild(r);
+      return r;
+    });
+    el.addEventListener('pointerleave', () => {
+      const p = panels[L];
+      if (!p) return;
+      p.hoverRow = null;
+      if (openTimer && openTimer.L === L) clearOpen();
+      render();
+    });
+    document.body.appendChild(el);
+    return { el, node, rows, openRow: null, hoverRow: null };
+  }
+  function place(p, L, row) {
+    const el = p.el;
+    if (L === 0) {
+      const a = anchor.getBoundingClientRect();
+      el.style.left = a.left + 'px';
+      el.style.top = a.bottom + 6 + 'px';
+      el.style.transformOrigin = 'left top';
+    } else {
+      const pr = panels[L - 1].el.getBoundingClientRect(), rr = row.getBoundingClientRect();
+      const w = el.offsetWidth, h = el.offsetHeight, off = p.rows[0].offsetTop;
+      let left = pr.right - 8, flip = false;
+      if (left + w > innerWidth - 8) { left = pr.left + 8 - w; flip = true; }
+      const top = clamp(rr.top - off, 12, innerHeight - 12 - h);
+      el.style.left = left + 'px';
+      el.style.top = top + 'px';
+      el.style.transformOrigin = flip ? 'right top' : 'left top';
+      el.classList.toggle('flip', flip);
+    }
+    el.offsetWidth;
+    requestAnimationFrame(() => el.classList.add('in'));
+  }
+  function render() {
+    panels.forEach(p => p.rows.forEach(r => {
+      r.classList.toggle('hover', p.hoverRow === r);
+      r.classList.toggle('active', p.openRow === r);
+      r.classList.toggle('open', p.openRow === r);
+    }));
+  }
+  function closeFrom(L) {
+    while (panels.length > L) panels.pop().el.remove();
+    const parent = panels[L - 1];
+    if (parent && parent.openRow) { parent.openRow.setAttribute('aria-expanded', 'false'); parent.openRow = null; }
+  }
+  function openChild(L, row) {
+    closeFrom(L + 1);
+    const p = build(row.node, L + 1);
+    panels.push(p);
+    panels[L].openRow = row;
+    row.setAttribute('aria-expanded', 'true');
+    place(p, L + 1, row);
+    render();
+  }
+  function openMenu() {
+    if (panels.length) return;
+    panels = [build(TREE, 0)];
+    place(panels[0], 0);
+    anchor.setAttribute('aria-expanded', 'true');
+    loop();
+  }
+  function closeAll() {
+    clearOpen(); clearPend(); cancelClose();
+    closeFrom(0);
+    anchor.setAttribute('aria-expanded', 'false');
+    poly.style.display = 'none';
+  }
+  function clearOpen() { if (openTimer) clearTimeout(openTimer.id); openTimer = null; }
+  function clearPend() { if (pend) { clearInterval(pend.iv); pend = null; } }
+  function scheduleClose() {
+    if (closeTimer) return;
+    closeT0 = performance.now();
+    closeTimer = setTimeout(closeAll, T.close);
+  }
+  function cancelClose() { clearTimeout(closeTimer); closeTimer = null; }
+
+  // 行生效：文件夹行打开子菜单，普通行收起更深的子菜单
+  function act(L, row) {
+    if (!panels[L]) return;
+    if (row.node.children) { if (panels[L].openRow !== row) openChild(L, row); }
+    else closeFrom(L + 1);
+    render();
+  }
+  function hover(L, row, immediate) {
+    panels[L].hoverRow = row;
+    render();
+    clearOpen();
+    if (immediate || T.open === 0) { act(L, row); return; }
+    openT0 = performance.now();
+    openTimer = { L, id: setTimeout(() => { openTimer = null; act(L, row); }, T.open) };
+  }
+  function onRow(L, row, e) {
+    const p = panels[L];
+    if (pend && pend.row === row) return;
+    if (p.hoverRow === row) return;
+    const touch = e.pointerType === 'touch';
+    const pt = { x: e.clientX, y: e.clientY };
+    if (!touch && panels[L + 1] && row !== p.openRow && inSafe(L, pt)) {
+      // 正在奔向子菜单：路过的行不响应，每 80ms 复查
+      clearPend(); clearOpen();
+      p.hoverRow = null;
+      render();
+      pend = { L, row, t0: performance.now() };
+      pend.iv = setInterval(() => {
+        const last = pts[pts.length - 1];
+        if (!pend) return;
+        if (!inSafe(L, last) || performance.now() - pend.t0 >= T.max) {
+          const r = pend.row;
+          clearPend();
+          const under = document.elementFromPoint(last.x, last.y);
+          if (under && under.closest('.mrow') === r) hover(L, r, true);
+        }
+      }, T.tick);
+      return;
+    }
+    clearPend();
+    hover(L, row, touch);
+  }
+
+  document.addEventListener('pointermove', e => {
+    if (!panels.length) return;
+    pts.push({ x: e.clientX, y: e.clientY });
+    if (pts.length > 4) pts.shift();
+    const t = e.target instanceof Element ? e.target : null;
+    const panelEl = t && t.closest('.mpanel');
+    const row = t && t.closest('.mrow');
+    const onAnchor = t && anchor.contains(t);
+    const pt = pts[pts.length - 1];
+    let safe = false;
+    for (let L = 0; L < panels.length - 1; L++) if (inSafe(L, pt)) { safe = true; break; }
+    if (panelEl || onAnchor || safe) cancelClose(); else scheduleClose();
+    if (panelEl) {
+      const M = +panelEl.dataset.level;
+      curLevel = M;
+      // 指针一旦进入已打开的子菜单，所有保护解除
+      if (pend && pend.L < M) { clearPend(); render(); }
+      if (row && panels[M]) onRow(M, row, e);
+    }
+    drawDebug(pt);
+  });
+  document.addEventListener('pointerleave', () => { if (panels.length) scheduleClose(); });
+  document.addEventListener('pointerdown', e => {
+    if (!panels.length) return;
+    const t = e.target instanceof Element ? e.target : null;
+    if (t && (t.closest('.mpanel') || anchor.contains(t))) return;
+    closeAll();
+  });
+  addEventListener('scroll', () => { if (panels.length) closeAll(); }, { passive: true });
+  addEventListener('resize', () => { if (panels.length) closeAll(); });
+
+  anchor.addEventListener('click', e => {
+    if (panels.length) { closeAll(); return; }
+    openMenu();
+    if (e.detail === 0) focusRow(0, 0);
+  });
+  document.addEventListener('click', e => {
+    const row = e.target instanceof Element && e.target.closest('.mrow');
+    if (!row) return;
+    const L = +row.closest('.mpanel').dataset.level;
+    if (row.node.children) { clearPend(); hover(L, row, true); }
+    else { readoutMsg(`已打开「${row.node.label}」`); closeAll(); anchor.focus(); }
+  });
+
+  function focusRow(L, i) {
+    const p = panels[L];
+    if (!p) return;
+    const r = p.rows[(i + p.rows.length) % p.rows.length];
+    p.hoverRow = r;
+    render();
+    r.focus();
+  }
+  document.addEventListener('keydown', e => {
+    if (!panels.length) return;
+    const cur = document.activeElement && document.activeElement.closest && document.activeElement.closest('.mrow');
+    const L = cur ? +cur.closest('.mpanel').dataset.level : -1;
+    const idx = cur ? panels[L].rows.indexOf(cur) : -1;
+    if (e.key === 'Escape') { e.preventDefault(); closeAll(); anchor.focus(); return; }
+    if (!cur) { if (e.key === 'ArrowDown') { e.preventDefault(); focusRow(0, 0); } return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); focusRow(L, idx + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); focusRow(L, idx - 1); }
+    else if ((e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') && cur.node.children) { e.preventDefault(); openChild(L, cur); focusRow(L + 1, 0); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cur.click(); }
+    else if (e.key === 'ArrowLeft' && L > 0) { e.preventDefault(); const back = panels[L - 1].openRow; closeFrom(L); render(); back && back.focus(); }
+  });
+
+  function drawDebug(pt) {
+    let shown = false;
+    if (debugOn && safeOn && panels.length > 1) {
+      const L = panels[curLevel + 1] ? curLevel : panels.length - 2;
+      const g = L >= 0 && geom(L);
+      if (g) {
+        const inBand = g.right ? pt.x >= g.pr.right - g.band : pt.x <= g.pr.left + g.band;
+        if (inBand) {
+          poly.setAttribute('points', `${g.apex.x},${g.apex.y} ${g.b.x},${g.b.y} ${g.c.x},${g.c.y}`);
+          shown = true;
+        }
+      }
+    }
+    poly.style.display = shown ? '' : 'none';
+  }
+  let msgUntil = 0, msg = '';
+  function readoutMsg(m) { msg = m; msgUntil = performance.now() + 1600; loop(); }
+  function setBar(k, v, max, label) {
+    bars[k].i.style.width = max ? clamp(v / max) * 100 + '%' : '0%';
+    bars[k].b.textContent = label;
+  }
+  let raf = 0;
+  function loop() {
+    cancelAnimationFrame(raf);
+    const tick = () => {
+      const now = performance.now();
+      readout.style.visibility = debugOn ? 'visible' : 'hidden';
+      if (openTimer) setBar(0, now - openT0, T.open, `${Math.round(now - openT0)} / ${T.open}`); else setBar(0, 0, 0, '—');
+      if (pend) setBar(1, now - pend.t0, T.max, `${Math.round(now - pend.t0)} / ${T.max}`); else setBar(1, 0, 0, '—');
+      if (closeTimer) setBar(2, now - closeT0, T.close, `${Math.round(now - closeT0)} / ${T.close}`); else setBar(2, 0, 0, now < msgUntil ? msg : '—');
+      if (panels.length || now < msgUntil) raf = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  seg($('#mMode'), v => { safeOn = v === 'safe'; T = safeOn ? SAFE : PLAIN; closeAll(); });
+  seg($('#mDbg'), v => { debugOn = v === 'on'; poly.style.display = 'none'; loop(); });
+})();
+</script>
+</body>
+</html>

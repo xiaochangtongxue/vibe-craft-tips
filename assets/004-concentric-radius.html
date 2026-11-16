@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>004 · 递进式圆角与连续曲率圆角</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Pixelify+Sans:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="base.css">
+<style>
+/* ---------- 004 圆角 ---------- */
+.r-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 20px; }
+@media (max-width: 760px) { .r-grid { grid-template-columns: minmax(0, 1fr); } }
+.r-col { display: flex; flex-direction: column; gap: 14px; align-items: center; min-width: 0; }
+.r-cap { font: 500 12.5px var(--mono); color: var(--muted); }
+.rd { position: relative; width: 100%; max-width: 360px; background: var(--surface); padding: 16px; display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 24px 48px -18px rgba(15,23,42,.28), 0 0 0 1px var(--line); }
+.rd-h { display: flex; gap: 12px; align-items: center; padding: 4px 4px 0; }
+.rd-av { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #8db0ff, #3557d6); flex: none; }
+.rd-h b { display: block; font-weight: 600; font-size: 15px; line-height: 1.3; }
+.rd-h small { color: var(--muted); font-size: 12.5px; }
+.rd-panel { background: var(--stage); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.rd-field { display: flex; gap: 8px; }
+.rd-in { flex: 1; min-width: 0; height: 36px; border: 1px solid var(--line-strong); background: var(--surface); padding: 0 10px; font: 13px var(--mono); }
+.rd-btn { height: 36px; padding: 0 14px; border: 0; background: var(--fg); color: var(--bg); font-weight: 600; font-size: 13px; cursor: pointer; }
+.rd-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.rd-chip { height: 28px; display: inline-flex; align-items: center; padding: 0 10px; background: var(--surface); border: 1px solid var(--line); font-size: 12.5px; }
+.rd-chip.pill { border-radius: 999px; }
+.rd-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.rd-actions button { height: 40px; padding: 0 18px; font-weight: 600; font-size: 14px; border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; }
+.rd-actions .rd-primary { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+.rd--good { border-radius: 32px; }
+.rd--good .rd-panel { border-radius: 16px; }
+.rd--good .rd-in, .rd--good .rd-btn, .rd--good .rd-chip:not(.pill) { border-radius: 8px; }
+.rd--good .rd-actions button { border-radius: 16px; }
+.rd--bad { border-radius: 24px; }
+.rd--bad .rd-panel { border-radius: 24px; }
+.rd--bad .rd-in { border-radius: 12px; }
+.rd--bad .rd-btn { border-radius: 6px; }
+.rd--bad .rd-chip:not(.pill) { border-radius: 4px; }
+.rd--bad .rd-actions button { border-radius: 10px; }
+@supports (corner-shape: superellipse(1.25)) {
+  .se-on .rd, .se-on .rd * { corner-shape: superellipse(1.25); }
+  .se-on .rd .pill, .se-on .rd .rd-av { corner-shape: round; }
+}
+.r-guide { position: absolute; border: 1px dashed var(--accent); border-radius: 50%; pointer-events: none; }
+.r-dot { position: absolute; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--accent); pointer-events: none; }
+</style>
+</head>
+<body>
+<main class="page">
+<nav class="crumbs" aria-label="翻页"><a href="index.html">全部 18 期</a><span style="display:flex;gap:16px"><a href="003-dither-ascii.html">← 003</a><a href="005-drag-reorder.html">005 →</a></span></nav>
+<section class="tip" id="t004">
+  <div class="tip-h"><span class="no">004</span><h2>递进式圆角与连续曲率圆角</h2><a class="src" href="https://x.com/Kubai087/status/2115469767650021796" target="_blank" rel="noopener">原帖 ↗</a></div>
+  <p class="lede">内圆角 = 外圆角 − 间距，内外圆弧共用一个圆心，转角处的间距就和直边一样宽。打开「圆心」看两边的差别。</p>
+  <div class="stage" id="rStage">
+    <div class="ctrls">
+      <div class="seg" id="rGuide" role="group" aria-label="圆心辅助线"><button type="button" data-v="on" aria-pressed="false">显示圆心</button><button type="button" data-v="off" aria-pressed="true">隐藏</button></div>
+      <div class="seg" id="rSe" role="group" aria-label="连续曲率圆角"><button type="button" data-v="off" aria-pressed="true">普通圆角</button><button type="button" data-v="on" aria-pressed="false">超椭圆 1.25</button></div>
+    </div>
+    <div class="r-grid">
+      <div class="r-col">
+        <div class="rd rd--bad" data-c>
+          <div class="rd-h"><span class="rd-av"></span><div><b>分享「质感小技巧」</b><small>3 位成员可编辑</small></div></div>
+          <div class="rd-panel" data-c>
+            <div class="rd-field"><input class="rd-in" data-c value="kubai.design/tips/004" readonly aria-label="分享链接"><button class="rd-btn" type="button">复制</button></div>
+            <div class="rd-chips"><span class="rd-chip">可查看</span><span class="rd-chip">可评论</span><span class="rd-chip pill">+ 邀请</span></div>
+          </div>
+          <div class="rd-actions"><button type="button">取消</button><button type="button" class="rd-primary">完成</button></div>
+        </div>
+        <span class="r-cap">随手写：24 / 24 / 12 / 6</span>
+      </div>
+      <div class="r-col">
+        <div class="rd rd--good" data-c>
+          <div class="rd-h"><span class="rd-av"></span><div><b>分享「质感小技巧」</b><small>3 位成员可编辑</small></div></div>
+          <div class="rd-panel" data-c>
+            <div class="rd-field"><input class="rd-in" data-c value="kubai.design/tips/004" readonly aria-label="分享链接"><button class="rd-btn" type="button">复制</button></div>
+            <div class="rd-chips"><span class="rd-chip">可查看</span><span class="rd-chip">可评论</span><span class="rd-chip pill">+ 邀请</span></div>
+          </div>
+          <div class="rd-actions"><button type="button">取消</button><button type="button" class="rd-primary">完成</button></div>
+        </div>
+        <span class="r-cap">r = R − p：32 → 16 → 8</span>
+      </div>
+    </div>
+  </div>
+  <ul class="specs"><li>同层级共用一个圆角</li><li>最小 4px，胶囊与圆形保持全圆</li><li>padding / gap / radius 落在 4px 栅格</li><li>@supports (corner-shape) 渐进增强</li></ul>
+</section>
+<p class="credit">技巧思路与数值来自 <a href="https://x.com/Kubai087" target="_blank" rel="noopener">枯白啃设计 @Kubai087</a> 的《999 个小技巧，让你 Vibe 的产品更有质感》，页面是按原帖 Prompt 的复现，效果以原帖视频为准。</p>
+</main>
+<script src="base.js"></script>
+<script>
+/* ---------- 004 圆角 ---------- */
+(() => {
+  const stage = $('#rStage');
+  let guides = false;
+  const seBtn = $('#rSe button[data-v="on"]');
+  if (!CSS.supports('corner-shape', 'superellipse(1.25)')) { seBtn.disabled = true; seBtn.textContent = '超椭圆（当前浏览器不支持）'; }
+  seg($('#rSe'), v => { stage.classList.toggle('se-on', v === 'on'); draw(); });
+  seg($('#rGuide'), v => { guides = v === 'on'; draw(); });
+  function draw() {
+    $$('.r-guide, .r-dot', stage).forEach(n => n.remove());
+    if (!guides) return;
+    $$('.rd', stage).forEach(rd => {
+      const o = rd.getBoundingClientRect();
+      $$('[data-c]', rd).concat(rd).forEach(el => {
+        const r = el.getBoundingClientRect(), rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+        const cx = r.left - o.left + rad, cy = r.top - o.top + rad;
+        const g = document.createElement('div');
+        g.className = 'r-guide';
+        Object.assign(g.style, { left: cx - rad + 'px', top: cy - rad + 'px', width: rad * 2 + 'px', height: rad * 2 + 'px' });
+        const d = document.createElement('div');
+        d.className = 'r-dot';
+        Object.assign(d.style, { left: cx + 'px', top: cy + 'px' });
+        rd.append(g, d);
+      });
+    });
+  }
+  new ResizeObserver(draw).observe(stage);
+})();
+</script>
+</body>
+</html>
